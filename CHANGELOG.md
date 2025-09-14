@@ -16,3 +16,6 @@ All notable changes to this project will be documented in this file.
 
 ## [0.1.0] - 2025-09-13
 - First public release
+
+## [0.1.1] - 2025-9-14
+- Fixed bugs, updated doc comments
