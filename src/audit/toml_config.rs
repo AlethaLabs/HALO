@@ -52,12 +52,14 @@ pub struct AuditConfig {
 /// importance = "Medium"
 /// recursive = false
 /// ```
-pub fn load_toml_rules(path: &str) -> Result<Vec<AuditRule>, Box<dyn std::error::Error>> {
+use crate::audit::audit_permissions::PermissionResults;
+
+pub fn load_toml_rules(path: &str) -> Result<Vec<PermissionResults>, Box<dyn std::error::Error>> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read TOML file '{}': {}", path, e))?;
     let config: AuditConfig =
         toml::from_str(&content).map_err(|e| format!("Failed to parse TOML config: {}", e))?;
-    let mut rules = Vec::new();
+    let mut results = Vec::new();
     for rule in &config.rules {
         // Validate path is non-empty and not just whitespace
         if rule.path.trim().is_empty() {
@@ -70,7 +72,6 @@ pub fn load_toml_rules(path: &str) -> Result<Vec<AuditRule>, Box<dyn std::error:
         }
         let mode = match &rule.expected_mode {
             ModeValue::Int(i) => {
-                // Accept integer as octal (e.g., 644)
                 let mode_str = i.to_string();
                 match parse_mode(&mode_str) {
                     Ok(m) => m,
@@ -105,30 +106,15 @@ pub fn load_toml_rules(path: &str) -> Result<Vec<AuditRule>, Box<dyn std::error:
         // Clone importance to avoid lifetime issues
         let importance = rule.importance.clone();
 
-        let recursive = match rule.recursive {
-            Some(val) => val,
-            None => {
-                if path_obj.is_file() {
-                    false
-                } else if path_obj.is_dir() {
-                    true
-                } else {
-                    return Err(format!(
-                        "Cannot determine if path '{}' is file or directory for recursive option.",
-                        rule.path
-                    )
-                    .into());
-                }
-            }
-        };
-        rules.push(AuditRule {
-            path: path_obj,
-            expected_mode: mode,
-            importance,
-            recursive,
-        });
+        let (mut audit_rule, _path_status) = AuditRule::new(path_obj, mode, importance);
+        // Override recursive if specified in TOML
+        if let Some(rec) = rule.recursive {
+            audit_rule.recursive = rec;
+        }
+        let mut visited = std::collections::HashSet::new();
+        results.extend(audit_rule.check(&mut visited));
     }
-    Ok(rules)
+    Ok(results)
 }
 
 /*
