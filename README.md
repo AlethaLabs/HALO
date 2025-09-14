@@ -42,14 +42,16 @@ Or use commands directly:
 ./target/release/halo check --path /etc/shadow --expect-uid 0 --expect-gid 42 
 
 # Load custom audit rules from TOML
-./target/release/halo check --toml examples/toml_configs/permissions_config.toml
+./target/release/halo check --toml config.toml
 
 # Generate Bash completion script
 ./target/release/halo bash --out halo.bash
 source halo.bash
 ```
-
-
+### Run examples
+```bash
+cargo run --example permissions
+```
 ### Library
 Add to your Rust project and use the API:
 ```rust
