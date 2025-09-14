@@ -13,7 +13,7 @@ HALO is a modular Rust-based tool for auditing, parsing, and rendering Linux sys
 - CLI and library APIs
 - Output in JSON, CSV, and pretty text formats (JSON only for permission/ownership audits)
 
-## Installation
+## Installation From Repo
 This is a rust program, so rust is required to build the library.
 If you need help with installing rust check out the - [Rust Installation Guide](https://www.rust-lang.org/tools/install)
 
@@ -68,8 +68,11 @@ cargo run --example permissions
 ```
 ### Library
 Add to your Rust project and use the API:
+```bash
+cargo add alhalo
+```
 ```rust
-use halo::{UserConfig, render_json};
+use alhalo::{UserConfig, render_json};
 let results = UserConfig::default().run_audit_perms();
 println!("{}", render_json(&results)?);
 ```
