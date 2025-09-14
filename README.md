@@ -14,7 +14,20 @@ HALO is a modular Rust-based tool for auditing, parsing, and rendering Linux sys
 - Output in JSON, CSV, and pretty text formats (JSON only for permission/ownership audits)
 
 ## Installation
-Clone the repository and build with Cargo:
+This is a rust program, so rust is required to build the library.
+If you need help with installing rust check out the - [Rust Installation Guide](https://www.rust-lang.org/tools/install)
+
+You will also need to have git installed, to be sure type into your terminal:
+```bash
+git --version
+```
+After rust is installed and you confirmed your git installation, you can clone this repository
+```bash
+mkdir halo_build
+cd halo_build
+git clone https://github.com/AlethaLabs/HALO.git
+```
+Then build with rusts package manager/build tool - Cargo:
 ```bash
 cargo build --release
 ```
@@ -50,6 +63,7 @@ source halo.bash
 ```
 ### Run examples
 ```bash
+./target/release/halo check --toml /examples/toml_configs/permissions_config.toml
 cargo run --example permissions
 ```
 ### Library
@@ -61,7 +75,8 @@ println!("{}", render_json(&results)?);
 ```
 
 ## Contributing
-Contributions are welcome! Please open issues or pull requests for bugs, features, or improvements.
+Contributions are welcome! Please open issues or pull requests for bugs, features, or improvements. 
+Please refer to [CONTRIBUTING.md](CONTRIBUTING.md) for more information and the process of contributing to this project
 
 ## License
 MIT
