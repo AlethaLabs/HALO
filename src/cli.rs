@@ -74,7 +74,18 @@ pub enum Commands {
     },
 
     /// Check file permissions and/or ownership
-    #[clap(group(ArgGroup::new("audit").required(true).args(&["target", "path"])))]
+    #[clap(
+        group(
+            ArgGroup::new("audit")
+                .required(false)
+                .args(&["target", "path"])
+        ),
+        group(
+            ArgGroup::new("config")
+                .required(false)
+                .args(&["toml"])
+        ),
+    )]
     Check {
         #[arg(
             value_enum,
