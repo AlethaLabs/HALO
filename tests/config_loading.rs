@@ -1,5 +1,5 @@
 // Integration test for TOML config loading in HALO
-use halo::load_toml_rules;
+use alhalo::load_toml_rules;
 use std::io::Write;
 
 #[test]

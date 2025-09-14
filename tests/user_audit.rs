@@ -1,5 +1,5 @@
 // Integration test: run a user audit and check output
-use halo::{AuditPermissions, UserConfig, render_json};
+use alhalo::{AuditPermissions, UserConfig, render_json};
 
 #[test]
 fn user_audit_json_output() {

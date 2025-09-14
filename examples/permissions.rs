@@ -1,4 +1,4 @@
-use halo::{AuditPermissions, AuditRule, Importance, UserConfig};
+use alhalo::{AuditPermissions, AuditRule, Importance, UserConfig};
 
 fn main() {
     // Audit /etc/passwd with expected mode 0o644 and medium importance

@@ -3,6 +3,19 @@
 version = 4
 
 [[package]]
+name = "alhalo"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "clap_complete",
+ "indexmap",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
 name = "anstream"
 version = "0.6.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -151,19 +164,6 @@ dependencies = [
  "libc",
  "r-efi",
  "wasi",
-]
-
-[[package]]
-name = "halo"
-version = "0.1.0"
-dependencies = [
- "clap",
- "clap_complete",
- "indexmap",
- "serde",
- "serde_json",
- "tempfile",
- "toml",
 ]
 
 [[package]]

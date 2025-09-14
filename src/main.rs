@@ -1,5 +1,5 @@
+use alhalo::cli::{Cli, cli, run_command};
 use clap::Parser;
-use halo::cli::{Cli, cli, run_command};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

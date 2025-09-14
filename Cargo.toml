@@ -1,7 +1,7 @@
 [dev-dependencies]
 tempfile = "3.8"
 [package]
-name = "halo"
+name = "alhalo"
 version = "0.1.0"
 edition = "2024"
 description = "Linux system audit library and CLI for home users and sysadmins."

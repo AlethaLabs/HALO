@@ -1,15 +1,15 @@
 // Integration tests for edge cases in HALO
-use halo::{AuditError, AuditPermissions, Log, parse_mode, render_json};
+use alhalo::{AuditError, AuditPermissions, Log, parse_mode, render_json};
 
 #[test]
 fn test_nonexistent_file_audit() {
-    let results = halo::AuditRule::custom_audit(
+    let results = alhalo::AuditRule::custom_audit(
         std::path::PathBuf::from("/tmp/this_file_should_not_exist"),
         0o644,
-        halo::Importance::Low,
+        alhalo::Importance::Low,
     );
     assert!(!results.is_empty());
-    assert!(results[0].status == halo::Status::Fail);
+    assert!(results[0].status == alhalo::Status::Fail);
     assert!(results[0].error.is_some());
 }
 
@@ -24,7 +24,7 @@ fn test_empty_config_audit() {
     // Simulate an empty config struct
     struct EmptyConfig;
     impl AuditPermissions for EmptyConfig {
-        fn rules(&self) -> Vec<halo::AuditRule> {
+        fn rules(&self) -> Vec<alhalo::AuditRule> {
             vec![]
         }
     }

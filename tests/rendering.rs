@@ -1,5 +1,5 @@
 // Integration tests for output rendering in HALO
-use halo::{DataList, DataMap, filter, render_csv, render_json, render_text};
+use alhalo::{DataList, DataMap, filter, render_csv, render_json, render_text};
 
 fn sample_data() -> DataList {
     let mut map = DataMap::new();
