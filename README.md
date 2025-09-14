@@ -6,7 +6,6 @@ A Linux System Audit Library and CLI by Aletha Labs
 HALO is a modular Rust-based tool for auditing, parsing, and rendering Linux system configuration. It is designed to be simple for home users, yet powerful for sysadmins, with a focus on extensibility, actionable output, and maintainable code.
 
 ## Features
-- Modular CLI command handlers for maintainability
 - Audit system, user, network, and log files for best-practice permissions
 - Ownership audit with UID/GID checks
 - Configurable rules via TOML
@@ -37,19 +36,22 @@ Or use commands directly:
 ./target/release/halo check --target user
 
 # Audit a file with expected permissions and importance
-./target/release/halo check --path /etc/shadow --expect 640 --importance high --format json
+./target/release/halo check --path /etc/shadow --expect 640 --importance high 
 
 # Audit file ownership (UID/GID)
-./target/release/halo check --path /etc/shadow --expect-uid 0 --expect-gid 42 --format json
+./target/release/halo check --path /etc/shadow --expect-uid 0 --expect-gid 42 
 
 # Load custom audit rules from TOML
 ./target/release/halo check --toml config.toml
 
 # Generate Bash completion script
 ./target/release/halo bash --out halo.bash
+source halo.bash
 ```
-
-
+### Run examples
+```bash
+cargo run --example permissions
+```
 ### Library
 Add to your Rust project and use the API:
 ```rust
