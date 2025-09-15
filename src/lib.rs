@@ -1,4 +1,4 @@
-//! # Aletha Labs: HALO — Linux System Permissions Audit
+//! # Aletha Labs: HALO — Host Armor for Linux Operations
 //!
 //! **Audit, parse, and render Linux system configuration and permissions.**
 //!

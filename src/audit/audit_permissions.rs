@@ -1,3 +1,14 @@
+//! Permission audit logic for HALO.
+//!
+//! This module provides types, traits, and functions for auditing Linux file and directory permissions.
+//!
+//! Main features:
+//! - Audit rules for files and directories
+//! - Severity and status classification for permission mismatches
+//! - Parsing of octal and symbolic permission formats
+//! - Recursive directory audits and custom audit support
+//!
+//! Used by the HALO CLI to check system configuration and security posture.
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::HashSet;
 use std::fmt;
@@ -12,13 +23,15 @@ impl std::error::Error for AuditError {}
 /// - `WORLD_WRITE`: Others write bit (critical risk)
 /// - `GROUP_PERMS`: Group read/write/execute bits
 /// - `OTHER_PERMS`: Others read/write/execute bits
+///
+/// These constants are used to determine the severity of permission mismatches.
 const WORLD_WRITE: u32 = 0o002;
 const GROUP_PERMS: u32 = 0o070;
 const OTHER_PERMS: u32 = 0o007;
 
 /// Severity level of audit failure.
 ///
-/// Used to classify the risk of a permission mismatch.
+/// Used to classify the risk of a permission mismatch when auditing file or directory permissions.
 #[derive(Debug, Serialize, PartialEq)]
 pub enum Severity {
     /// No issue (exact match)
@@ -36,6 +49,8 @@ pub enum Severity {
 }
 
 /// Status of a user-selected path for audit.
+///
+/// Indicates whether the path is a valid file, directory, or not found.
 #[derive(Debug, PartialEq)]
 pub enum PathStatus {
     /// Path is a valid file
@@ -47,6 +62,8 @@ pub enum PathStatus {
 }
 
 /// Result status for a permission audit.
+///
+/// Indicates whether the permissions passed, failed, or are stricter than expected.
 #[derive(Debug, Serialize, PartialEq)]
 pub enum Status {
     /// Permissions match expected
@@ -58,6 +75,8 @@ pub enum Status {
 }
 
 /// Importance level for an audited file or directory.
+///
+/// Used to indicate the security relevance of a file or directory in an audit.
 #[derive(Debug, Serialize, PartialEq, clap::ValueEnum, Clone, Deserialize)]
 pub enum Importance {
     /// High importance (security-critical)
@@ -69,6 +88,8 @@ pub enum Importance {
 }
 
 /// Result of a permission audit for a single file or directory.
+///
+/// Contains the outcome of a permission check, including severity, status, path, expected and found modes, importance, and any error.
 #[derive(Debug, Serialize)]
 pub struct PermissionResults {
     /// Severity of the mismatch
@@ -91,6 +112,8 @@ pub struct PermissionResults {
 }
 
 /// Helper to serialize file modes as octal strings for JSON output.
+///
+/// Used for pretty-printing file modes in audit results.
 pub fn as_octal<S>(mode: &u32, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -101,6 +124,7 @@ where
 /// Trait for audit rule configuration structs.
 ///
 /// Implement this trait to provide audit rules for a group of files or directories.
+/// Used to define and run permission audits for custom configuration structs.
 pub trait AuditPermissions {
     /// Returns a vector of audit rules for the struct.
     fn rules(&self) -> Vec<AuditRule>;
@@ -117,6 +141,8 @@ pub trait AuditPermissions {
 }
 
 /// Audit rule for a single file or directory path.
+///
+/// Defines the path, expected mode, recursion, and importance for auditing.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AuditRule {
     /// Path to audit
@@ -134,6 +160,14 @@ impl AuditRule {
     /// Create a new audit rule and determine the path status.
     ///
     /// Returns the rule and whether the path is a file, directory, or not found.
+    ///
+    /// # Arguments
+    /// * `path` - Path to audit
+    /// * `expected_mode` - Expected file mode (octal)
+    /// * `importance` - Importance level
+    ///
+    /// # Returns
+    /// Tuple of `AuditRule` and `PathStatus`.
     pub fn new(path: PathBuf, expected_mode: u32, importance: Importance) -> (Self, PathStatus) {
         if !path.exists() {
             return (
@@ -183,6 +217,12 @@ impl AuditRule {
     /// Determine severity based on mode comparison.
     ///
     /// Returns a `Severity` value based on the difference between found and expected mode.
+    ///
+    /// # Arguments
+    /// * `mode_found` - The actual file mode found
+    ///
+    /// # Returns
+    /// Severity of the mismatch
     pub fn determine_severity(&self, mode_found: u32) -> Severity {
         // World-writable is always critical
         if (mode_found & WORLD_WRITE) != 0 {
@@ -213,6 +253,12 @@ impl AuditRule {
     /// Check the permissions of the file or directory against the expected mode.
     ///
     /// Returns a vector of `PermissionResults` for the audited path and its contents (if recursive).
+    ///
+    /// # Arguments
+    /// * `visited` - HashSet to track visited directories (by dev/inode)
+    ///
+    /// # Returns
+    /// Vector of `PermissionResults` for the path and its children (if recursive)
     pub fn check(&self, visited: &mut HashSet<(u64, u64)>) -> Vec<PermissionResults> {
         let mut results = Vec::new();
 
@@ -317,7 +363,15 @@ impl AuditRule {
 
     /// Run a custom audit for a user-specified path, expected mode, and importance.
     ///
-    /// Returns a vector of `PermissionResults` for the path.
+    /// Used for ad-hoc audits outside of predefined rules.
+    ///
+    /// # Arguments
+    /// * `path` - Path to audit
+    /// * `expected_mode` - Expected file mode (octal)
+    /// * `importance` - Importance level
+    ///
+    /// # Returns
+    /// Vector of `PermissionResults` for the path
     pub fn custom_audit(
         path: PathBuf,
         expected_mode: u32,
@@ -354,7 +408,13 @@ impl AuditRule {
 
 /// Parse permissions from octal ("640"), long symbolic ("rw-r-----"), or short symbolic ("u=rw,g=r,o=") formats.
 ///
-/// Returns the parsed mode as a `u32` or an `AuditError` if parsing fails.
+/// Converts permission strings to a numeric mode for auditing.
+///
+/// # Arguments
+/// * `input` - Permission string in octal or symbolic format
+///
+/// # Returns
+/// Result containing parsed mode as `u32` or an `AuditError` if parsing fails.
 pub fn parse_mode(input: &str) -> Result<u32, AuditError> {
     // Octal input
     if input.chars().all(|c| c.is_digit(8)) {
@@ -437,6 +497,8 @@ pub fn parse_mode(input: &str) -> Result<u32, AuditError> {
 }
 
 /// Error type for permission audit failures and parsing errors.
+///
+/// Used to represent errors encountered during permission parsing or audit checks.
 #[derive(Debug, PartialEq, Serialize)]
 pub enum AuditError {
     /// Invalid octal mode string
@@ -456,6 +518,7 @@ pub enum AuditError {
 }
 
 impl fmt::Display for AuditError {
+    /// Formats the error for display purposes.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AuditError::InvalidOctalMode => write!(f, "Invalid octal mode"),
@@ -472,6 +535,7 @@ impl fmt::Display for AuditError {
 }
 
 /* -------- Unit tests for permission parsing ---------- */
+/// Unit tests for permission parsing and severity logic.
 #[cfg(test)]
 mod tests {
     #[test]

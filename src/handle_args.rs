@@ -1,3 +1,11 @@
+//! CLI argument handlers and audit dispatch for HALO.
+//!
+//! This module provides:
+//! - File parsing utilities for structured data
+//! - Audit target selection and permission checks
+//! - Ownership and summary handlers for CLI output
+//!
+//! Used by the main CLI loop to process commands and render results for users and sysadmins.
 use crate::cli::Cli;
 use crate::{
     AuditPermissions, AuditRule, Importance, Log, NetConf, PermissionResults, SysConfig,

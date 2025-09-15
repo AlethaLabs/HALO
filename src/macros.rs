@@ -1,3 +1,10 @@
+//! Macros for output rendering and audit trait implementation in HALO.
+//!
+//! This module provides:
+//! - `render!`: Macro for rendering CLI output in JSON, CSV, or text formats
+//! - `impl_audit!`: Macro to implement the `AuditPermissions` trait for config structs
+//!
+//! These macros reduce boilerplate and standardize output formatting and audit rule definitions.
 /// Macro for rendering output in various formats for CLI commands.
 ///
 /// # Usage

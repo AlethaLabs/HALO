@@ -1,3 +1,13 @@
+//! TOML configuration loader for HALO audit rules.
+//!
+//! This module provides types and functions for parsing audit rules from TOML files.
+//!
+//! Features:
+//! - Deserialize audit rule configs from TOML
+//! - Validate and convert permission formats (octal, symbolic)
+//! - Integrate with HALO's permission audit system
+//!
+//! Used to support custom audit configurations via CLI or config files.
 use crate::audit::audit_permissions::parse_mode;
 use crate::{AuditRule, Importance};
 use serde::Deserialize;

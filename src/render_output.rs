@@ -1,3 +1,11 @@
+//! Output rendering utilities for HALO.
+//!
+//! This module provides functions to render audit and parsed data in multiple formats:
+//! - Pretty-printed JSON
+//! - CSV (with optional column filtering)
+//! - Human-readable text blocks
+//!
+//! Used by the CLI and macro system to display results in a user-friendly way.
 use crate::{DataList, DataMap};
 use serde::Serialize;
 use serde_json;
