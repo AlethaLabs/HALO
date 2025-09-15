@@ -1,4 +1,7 @@
 # Aletha Labs - HALO: Host Armor for Linux Operations
+<p  align="center">
+    <img src="/assets/al_halo_nobg.png" alt="AL: HALO Logo" width="200"/>
+</p>
 
 A Linux System Audit Library and CLI by Aletha Labs
 
