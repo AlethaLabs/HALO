@@ -40,7 +40,7 @@ cargo build --release
 ### CLI
 Run the interactive CLI:
 ```bash
-cargo run
+cargo run 
 ```
 
 Or use commands directly:
