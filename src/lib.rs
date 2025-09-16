@@ -15,19 +15,79 @@
 //! - CLI and library APIs
 //!
 //! ## Quick Start
-//! Run the CLI:
+//! Run the interactive CLI:
 //! ```bash
-//! halo check --target user
-//! halo parse --file /proc/cpuinfo --format json
+//! cargo run
+//! Welcome to Aletha Labs: HALO - Host Armor for Linux Operations
+//!
+//! Please enter your commands, or type 'help' for further information
+//! halo> check --target user
+//! [
+//!  {
+//!    "severity": "None",
+//!    "status": "Pass",
+//!    "path": "/etc/passwd",
+//!    "expected_mode": "644",
+//!    "found_mode": "644",
+//!    "importance": "Medium"
+//!  },
+//!  { .....
+//!
+//! Summary: 29 checked, 27 passed, 0 strict, 2 failed
+//! [!] FAIL: /etc/shadow (found: 640, expected: 600)
+//!     Suggested fix: chmod 600 /etc/shadow
+//! .....
+//! ```
+//! Or run a single command directly:
+//! ```bash
+//! cargo run parse --file /proc/cpuinfo --format json
 //! ```
 //!
-//! Use as a library:
+//! ## Library Usage:
+//! This is a new library, there is bound to be some rough edges and breaking changes.
+//! Please open issues or PRs on [GitHub](https://github.com/AlethaLabs/halo) if you have suggestions or find bugs.
 //! ```rust
-//! use alhalo::audit::audit_permissions::{AuditRule, Severity};
-//! let rule = AuditRule::new("/etc/passwd", 0o644, Severity::Low);
-//! // ...
-//! ```
+//! // Note the "render_json" import is necessary for the macro render! to work correctly
+//! use alhalo::{render, AuditRule, Importance, PermissionResults, render_json, PathStatus};
+//! use std::collections::HashSet;
 //!
+//! fn main() {
+//!     // Create an audit rule for /etc/passwd with expected mode 0o644 and medium importance
+//!     let (rule, status) = AuditRule::new("/etc/passwd".into(), 0o644, Importance::Medium);
+//!
+//!     // Run the audit (checks permissions and returns results)
+//!     let mut visited = HashSet::new();
+//!     let results: Vec<PermissionResults> = rule.check(&mut visited);
+//!
+//!     // Handle the case where the path does not exist
+//!     match status {
+//!         PathStatus::NotFound => {
+//!             eprintln!("Warning: Path {} not found", rule.path.display());
+//!             return;
+//!         }
+//!         _ => {
+//!             // Print the results using alhalo render! macro
+//!             match render!(&results, Some("json")) {
+//!                 Ok(output) => println!("{}", output),
+//!                 Err(e) => eprintln!("Error rendering results: {}", e),
+//!             }
+//!         }
+//!     }
+//! }
+//! ```
+//! Expected output:
+//! ```bash
+//! [
+//!  {
+//!    "severity": "None",
+//!    "status": "Pass",
+//!    "path": "/etc/passwd",
+//!    "expected_mode": "644",
+//!    "found_mode": "644",
+//!    "importance": "Medium"
+//!  }
+//!]
+//! ```
 //! ## Modules
 //! - [`audit`](crate::audit): Audit logic and rules
 //! - [`render_output`](crate::render_output): Output formatting
@@ -42,10 +102,9 @@
 //! - `Cli` (for CLI integration)
 //!
 //! ## More Info
-//! - [GitHub](https://github.com/AlethaLabs/alhalo)
-//! - [Crates.io](https://crates.io/crates/alhalo)
-//! - [Docs.rs](https://docs.rs/alhalo)
-//! - [Full CLI Usage](https://github.com/AlethaLabs/alhalo#usage)
+//! - [GitHub](https://github.com/AlethaLabs/halo)
+//! - [Crates.io](https://crates.io/crates/halo)
+//! - [Docs.rs](https://docs.rs/halo)
 //!
 //! ---
 //!
@@ -59,8 +118,8 @@ pub mod render_output;
 
 pub use audit::{
     audit_permissions::{
-        AuditError, AuditPermissions, AuditRule, Importance, PermissionResults, Severity, Status,
-        parse_mode,
+        AuditError, AuditPermissions, AuditRule, Importance, PathStatus, PermissionResults,
+        Severity, Status, parse_mode,
     },
     default_permissions::{Log, NetConf, SysConfig, UserConfig},
     ownership::{OwnershipResult, OwnershipRule, check_ownership},
