@@ -2,21 +2,73 @@
 //!
 //! This module provides types, traits, and functions for auditing Linux file and directory permissions.
 //!
-//! Main features:
+//! # Main Features
 //! - Audit rules for files and directories
 //! - Severity and status classification for permission mismatches
 //! - Parsing of octal and symbolic permission formats
 //! - Recursive directory audits and custom audit support
+//! - Symlink detection and reporting
+//! - Permission denied, file not found, and other error handling
 //!
 //! Used by the HALO CLI to check system configuration and security posture.
+//!
+//! # Example Usage
+//!
+//! ## Auditing a Single File
+//! ```rust
+//! use alhalo{AuditRule, Importance};
+//! let rule = AuditRule {
+//!     path: "/etc/passwd".into(),
+//!     expected_mode: 0o644,
+//!     recursive: false,
+//!     importance: Importance::High,
+//! };
+//! let mut visited = std::collections::HashSet::new();
+//! let results = rule.check(&mut visited);
+//! for res in results {
+//!     println!("{}: found {:o}, expected {:o}, status: {:?}", res.path.display(), res.found_mode, res.expected_mode, res.status);
+//! }
+//! ```
+//!
+//! ## Auditing a Directory Recursively
+//! ```rust
+//! use alhalo::{AuditRule, Importance};
+//! let rule = AuditRule {
+//!     path: "/var/log".into(),
+//!     expected_mode: 0o640,
+//!     recursive: true,
+//!     importance: Importance::Medium,
+//! };
+//! let mut visited = std::collections::HashSet::new();
+//! let results = rule.check(&mut visited);
+//! println!("Checked {} files/directories", results.len());
+//! ```
+//!
+//! ## Custom Audit with Error Handling
+//! ```rust
+//! use alhalo::{AuditRule, Importance};
+//! let results = AuditRule::custom_audit("/tmp/does_not_exist".into(), 0o600, Importance::Low);
+//! for res in results {
+//!     if let Some(err) = &res.error {
+//!         println!("Error auditing {}: {}", res.path.display(), err);
+//!     }
+//! }
+//! ```
+//!
+//! ## Parsing Permission Strings
+//! ```rust
+//! use alhalo::parse_mode;
+//! assert_eq!(parse_mode("640"), Ok(0o640));
+//! assert_eq!(parse_mode("rw-r-----"), Ok(0o640));
+//! assert_eq!(parse_mode("u=rw,g=r,o="), Ok(0o640));
+//! ```
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::HashSet;
 use std::fmt;
 use std::fs;
+use std::io;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
-
-impl std::error::Error for AuditError {}
 
 /// File permission bitmasks for audit severity checks.
 ///
@@ -59,6 +111,8 @@ pub enum PathStatus {
     ValidDirectory,
     /// Path not found
     NotFound,
+    /// Permission denied when accessing path
+    PermissionDenied,
 }
 
 /// Result status for a permission audit.
@@ -181,36 +235,63 @@ impl AuditRule {
             );
         }
 
-        if path.is_file() {
-            (
-                AuditRule {
-                    path,
-                    expected_mode,
-                    importance,
-                    recursive: false,
-                },
-                PathStatus::ValidFile,
-            )
-        } else if path.is_dir() {
-            (
-                AuditRule {
-                    path,
-                    expected_mode,
-                    importance,
-                    recursive: true,
-                },
-                PathStatus::ValidDirectory,
-            )
-        } else {
-            (
-                AuditRule {
-                    path,
-                    expected_mode,
-                    importance,
-                    recursive: false,
-                },
-                PathStatus::NotFound, // fallback for weird cases
-            )
+        match fs::metadata(&path) {
+            Ok(meta) => {
+                if meta.is_file() {
+                    (
+                        AuditRule {
+                            path,
+                            expected_mode,
+                            importance,
+                            recursive: false,
+                        },
+                        PathStatus::ValidFile,
+                    )
+                } else if meta.is_dir() {
+                    (
+                        AuditRule {
+                            path,
+                            expected_mode,
+                            importance,
+                            recursive: true,
+                        },
+                        PathStatus::ValidDirectory,
+                    )
+                } else {
+                    (
+                        AuditRule {
+                            path,
+                            expected_mode,
+                            importance,
+                            recursive: false,
+                        },
+                        PathStatus::NotFound, // fallback for weird cases
+                    )
+                }
+            }
+            Err(e) => {
+                if e.kind() == io::ErrorKind::PermissionDenied {
+                    (
+                        AuditRule {
+                            path,
+                            expected_mode,
+                            importance,
+                            recursive: false,
+                        },
+                        PathStatus::PermissionDenied,
+                    )
+                } else {
+                    (
+                        AuditRule {
+                            path,
+                            expected_mode,
+                            importance,
+                            recursive: false,
+                        },
+                        PathStatus::NotFound,
+                    )
+                }
+            }
         }
     }
 
@@ -261,6 +342,22 @@ impl AuditRule {
     /// Vector of `PermissionResults` for the path and its children (if recursive)
     pub fn check(&self, visited: &mut HashSet<(u64, u64)>) -> Vec<PermissionResults> {
         let mut results = Vec::new();
+
+        // Symlink handling: skip symlinks at the top level
+        if let Ok(meta) = fs::symlink_metadata(&self.path) {
+            if meta.file_type().is_symlink() {
+                results.push(PermissionResults {
+                    path: self.path.clone(),
+                    status: Status::Strict,
+                    expected_mode: self.expected_mode,
+                    found_mode: 0,
+                    severity: Severity::Info,
+                    importance: self.importance.clone(),
+                    error: Some(AuditError::Other("Skipped symlink".to_string())),
+                });
+                return results;
+            }
+        }
 
         if self.path.is_file() {
             match fs::metadata(&self.path) {
@@ -327,8 +424,18 @@ impl AuditRule {
                 Ok(entries) => {
                     for entry in entries.flatten() {
                         let path = entry.path();
+                        // Symlink handling: skip symlinks in directory contents
                         if let Ok(meta) = fs::symlink_metadata(&path) {
                             if meta.file_type().is_symlink() {
+                                results.push(PermissionResults {
+                                    path: path.clone(),
+                                    status: Status::Strict,
+                                    expected_mode: self.expected_mode,
+                                    found_mode: 0,
+                                    severity: Severity::Info,
+                                    importance: self.importance.clone(),
+                                    error: Some(AuditError::Other("Skipped symlink".to_string())),
+                                });
                                 continue;
                             }
                         }
@@ -396,6 +503,20 @@ impl AuditRule {
                     importance: Importance::Low,
                     error: Some(AuditError::Other(format!(
                         "Path not found: {}",
+                        audit_rule.path.display()
+                    ))),
+                });
+            }
+            PathStatus::PermissionDenied => {
+                results.push(PermissionResults {
+                    severity: Severity::Critical,
+                    expected_mode,
+                    found_mode: 0o000,
+                    path,
+                    status: Status::Fail,
+                    importance: Importance::High,
+                    error: Some(AuditError::Other(format!(
+                        "Permission denied: {}",
                         audit_rule.path.display()
                     ))),
                 });
@@ -533,6 +654,7 @@ impl fmt::Display for AuditError {
         }
     }
 }
+impl std::error::Error for AuditError {}
 
 /* -------- Unit tests for permission parsing ---------- */
 /// Unit tests for permission parsing and severity logic.
