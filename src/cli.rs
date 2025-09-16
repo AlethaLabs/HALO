@@ -24,10 +24,11 @@
 //! # Ownership Checks
 //! To audit file ownership, use `--expect-uid` and/or `--expect-gid` with the `check` command.
 //! Ownership results are displayed after permission audit results.
+use crate::handle_args::{
+    AuditTarget, handle_bash, handle_file, handle_ownership, handle_permissions, handle_summary,
+};
 use crate::{
-    AuditTarget, Importance, filter, handle_bash, handle_file, handle_ownership,
-    handle_permissions, handle_summary, load_toml_rules, parse_mode, render, render_csv,
-    render_json, render_text,
+    Importance, filter, load_toml_rules, parse_mode, render, render_csv, render_json, render_text,
 };
 use clap::{ArgGroup, Parser, Subcommand};
 use std::io::Write;

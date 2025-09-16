@@ -6,11 +6,18 @@
 //! - Human-readable text blocks
 //!
 //! Used by the CLI and macro system to display results in a user-friendly way.
-use crate::{DataList, DataMap};
+use indexmap::IndexMap;
 use serde::Serialize;
 use serde_json;
 use std::io;
 
+/// A deterministic map of key-value pairs parsed from a file.
+///
+/// Using `IndexMap` instead of `HashMap` avoids randomizing file contents, ensuring stable output order.
+pub type DataMap = IndexMap<String, String>;
+
+/// A list of parsed data maps, representing structured file contents.
+pub type DataList = Vec<DataMap>;
 /// Renders any serializable data as pretty-printed JSON.
 ///
 /// # Arguments

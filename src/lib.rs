@@ -13,35 +13,10 @@
 //! - Built-in and custom audit targets
 //! - Output in pretty text, JSON, or CSV
 //! - CLI and library APIs
-//!
-//! ## Quick Start
-//! Run the interactive CLI:
-//! ```bash
-//! cargo run
-//! Welcome to Aletha Labs: HALO - Host Armor for Linux Operations
-//!
-//! Please enter your commands, or type 'help' for further information
-//! halo> check --target user
-//! [
-//!  {
-//!    "severity": "None",
-//!    "status": "Pass",
-//!    "path": "/etc/passwd",
-//!    "expected_mode": "644",
-//!    "found_mode": "644",
-//!    "importance": "Medium"
-//!  },
-//!  { .....
-//!
-//! Summary: 29 checked, 27 passed, 0 strict, 2 failed
-//! [!] FAIL: /etc/shadow (found: 640, expected: 600)
-//!     Suggested fix: chmod 600 /etc/shadow
-//! .....
-//! ```
-//! Or run a single command directly:
-//! ```bash
-//! cargo run parse --file /proc/cpuinfo --format json
-//! ```
+//! - Ownership audit for files and directories
+//! - Easy integration into scripts and automation
+//! - Open source under the MIT License
+//! - Actively maintained by Aletha Labs
 //!
 //! ## Library Usage:
 //! This is a new library, there is bound to be some rough edges and breaking changes.
@@ -88,23 +63,45 @@
 //!  }
 //!]
 //! ```
+//!
+//! ## Quick Start
+//! See (Github)[https://github.com/AlethaLabs/halo] to build CLIfrom source
+//! ```bash
+//! cargo run
+//! Welcome to Aletha Labs: HALO - Host Armor for Linux Operations
+//!
+//! Please enter your commands, or type 'help' for further information
+//! halo> check --target user
+//! [
+//!  {
+//!    "severity": "None",
+//!    "status": "Pass",
+//!    "path": "/etc/passwd",
+//!    "expected_mode": "644",
+//!    "found_mode": "644",
+//!    "importance": "Medium"
+//!  },
+//!  { .....
+//!
+//! Summary: 29 checked, 27 passed, 0 strict, 2 failed
+//! [!] FAIL: /etc/shadow (found: 640, expected: 600)
+//!     Suggested fix: chmod 600 /etc/shadow
+//! .....
+//! ```
+//! Or run a single command directly:
+//! ```bash
+//! cargo run parse --file /proc/cpuinfo --format json
+//! ```
+//!
 //! ## Modules
 //! - [`audit`](crate::audit): Audit logic and rules
 //! - [`render_output`](crate::render_output): Output formatting
 //! - [`cli`](crate::cli): CLI command parsing
 //!
-//! ## Re-exports
-//! The crate root re-exports key types and functions for convenience:
-//! - `AuditRule`, `AuditPermissions`, `AuditError`, `Severity`, `Status`
-//! - `AuditConfig`, `AuditRuleConfig`, `load_toml_rules`
-//! - `OwnershipRule`, `OwnershipResult`, `check_ownership`
-//! - `render_json`, `render_csv`, `render_text`, `filter`
-//! - `Cli` (for CLI integration)
-//!
 //! ## More Info
 //! - [GitHub](https://github.com/AlethaLabs/halo)
-//! - [Crates.io](https://crates.io/crates/halo)
-//! - [Docs.rs](https://docs.rs/halo)
+//! - [Crates.io](https://crates.io/crates/alhalo)
+//! - [Docs.rs](https://docs.rs/alhalo)
 //!
 //! ---
 //!
@@ -126,9 +123,4 @@ pub use audit::{
     toml_config::{AuditConfig, AuditRuleConfig, load_toml_rules},
 };
 
-pub use cli::Cli;
-pub use handle_args::{
-    AuditTarget, DataList, DataMap, handle_bash, handle_file, handle_ownership, handle_permissions,
-    handle_summary,
-};
-pub use render_output::{filter, render_csv, render_json, render_text};
+pub use render_output::{DataList, DataMap, filter, render_csv, render_json, render_text};

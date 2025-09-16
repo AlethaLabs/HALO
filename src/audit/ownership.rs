@@ -9,7 +9,7 @@
 //!
 //! # Example Usage
 //! ```rust
-//! use alhalo::audit::ownership::{OwnershipRule, check_ownership};
+//! use alhalo::{OwnershipRule, check_ownership};
 //! let rule = OwnershipRule {
 //!     path: "/etc/shadow".into(),
 //!     expected_uid: 0,
