@@ -19,3 +19,8 @@ All notable changes to this project will be documented in this file.
 
 ## [0.1.1] - 2025-9-14
 - Fixed bugs, updated doc comments
+
+## [0.1.3] - 2025-9-15
+- Added PermissionDenied to PathStatus enum 
+- Added symlink handling
+- Updated (documentaion)[https://docs.rs/alhalo/0.1.12/alhalo/index.html]
