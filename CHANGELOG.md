@@ -24,3 +24,7 @@ All notable changes to this project will be documented in this file.
 - Added PermissionDenied to PathStatus enum 
 - Added symlink handling
 - Updated (documentaion)[https://docs.rs/alhalo/0.1.12/alhalo/index.html]
+
+## [0.1.4] - 2025-9-16
+- Seperated CLI binary from Library API
+- Updated documentation/readme
