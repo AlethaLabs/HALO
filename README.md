@@ -1,6 +1,6 @@
-# [![Crates.io](https://img.shields.io/crates/v/alhalo.svg)](https://crates.io/crates/alhalo)
-# [![Docs.rs](https://docs.rs/alhalo/badge.svg)](https://docs.rs/alhalo)
-# [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Crates.io](https://img.shields.io/crates/v/alhalo.svg)](https://crates.io/crates/alhalo)
+[![Docs.rs](https://docs.rs/alhalo/badge.svg)](https://docs.rs/alhalo)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 # Aletha Labs - HALO: Host Armor for Linux Operations
 <p  align="center">
     <img src="/assets/al_halo_nobg.png" alt="AL: HALO Logo" width="450"/>
