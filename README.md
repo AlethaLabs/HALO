@@ -27,7 +27,7 @@ This modular structure makes it easy to add new CLI commands or audit rules.
 - Library APIs - see [docs](https://docs.rs/alhalo)
 - Interactive CLI (must build from this [repository source](https://github.com/AlethaLabs/HALO.git))
 - Output in JSON, CSV, and text formats
-- *** Automatically fix broken permissions *** 
+*** Automatically fix broken permissions *** 
 
 ## Build From Repository
 This is a rust program, so rust is required to build the library.
