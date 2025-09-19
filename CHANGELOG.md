@@ -23,8 +23,23 @@ All notable changes to this project will be documented in this file.
 ## [0.1.3] - 2025-9-15
 - Added PermissionDenied to PathStatus enum 
 - Added symlink handling
-- Updated (documentaion)[https://docs.rs/alhalo/0.1.12/alhalo/index.html]
+- Updated [documentaion](https://docs.rs/alhalo/0.1.12/alhalo/index.html)
 
 ## [0.1.4] - 2025-9-16
 - Seperated CLI binary from Library API
 - Updated documentation/readme
+
+## [0.2.0] - 2025-9-19
+- **Starting this day (Friday - 2025-9-19) there will be major releases every other Friday**
+- Changed AuditRule -> PermissionRules for clarity of use
+- Added symbolic link detection/auditing functionality
+- Updated documentation in [lib](lib.rs), and [README](README.md)
+- Updated docs
+- Added more (examples)[examples]
+- Fixed seperation concerns of library and binary files
+- Added better output configuration for Audits
+- Advanced Ownership checks and configurations
+- Added toml support for Ownership/Symlink configuration
+- Improved error handling/reporting
+- Added beginnings of [fix_script](audit/fix_script.rs) which can automaticaly fix mismatched permssions
+

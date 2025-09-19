@@ -6,6 +6,7 @@
 //! - Human-readable text blocks
 //!
 //! Used by the CLI and macro system to display results in a user-friendly way.
+
 use indexmap::IndexMap;
 use serde::Serialize;
 use serde_json;
@@ -77,8 +78,7 @@ pub fn render_csv(data: &DataList, line: &[String]) -> io::Result<String> {
 pub fn render_text(data: &DataList, line: &[String]) -> io::Result<String> {
     let data = filter(data, line);
     let mut out = String::new();
-    for (i, block) in data.iter().enumerate() {
-        out.push_str(&format!("Block {}:\n", i));
+    for block in data {
         for (k, v) in block {
             out.push_str(&format!("  {}: {}\n", k, v));
         }

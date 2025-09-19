@@ -1,16 +1,21 @@
-[[rules]]
+[[perm_rules]]
 path = "/etc/passwd"
 expected_mode = 644
 importance = "Medium"
 
-[[rules]]
+[[perm_rules]]
 path = "/etc/shadow"
 expected_mode = "600"
 importance = "High"
 
 
-[[rules]]
+[[perm_rules]]
 path = "/var/log/btmp"
 expected_mode = "u=rw,g=,o="
 importance = "Low"
+
+[[owner_rules]]
+path = "/etc/passwd"
+expected_uid = 0
+expected_gid = 0
 

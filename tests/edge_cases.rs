@@ -3,7 +3,7 @@ use alhalo::{AuditError, AuditPermissions, Log, parse_mode, render_json};
 
 #[test]
 fn test_nonexistent_file_audit() {
-    let results = alhalo::AuditRule::custom_audit(
+    let results = alhalo::PermissionRules::custom_audit(
         std::path::PathBuf::from("/tmp/this_file_should_not_exist"),
         0o644,
         alhalo::Importance::Low,
@@ -24,7 +24,7 @@ fn test_empty_config_audit() {
     // Simulate an empty config struct
     struct EmptyConfig;
     impl AuditPermissions for EmptyConfig {
-        fn rules(&self) -> Vec<alhalo::AuditRule> {
+        fn rules(&self) -> Vec<alhalo::PermissionRules> {
             vec![]
         }
     }

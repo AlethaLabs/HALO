@@ -16,8 +16,8 @@
 //!
 //! ## Auditing a Single File
 //! ```rust
-//! use alhalo{AuditRule, Importance};
-//! let rule = AuditRule {
+//! use alhalo::{PermissionRules, Importance};
+//! let rule = PermissionRules {
 //!     path: "/etc/passwd".into(),
 //!     expected_mode: 0o644,
 //!     recursive: false,
@@ -32,8 +32,8 @@
 //!
 //! ## Auditing a Directory Recursively
 //! ```rust
-//! use alhalo::{AuditRule, Importance};
-//! let rule = AuditRule {
+//! use alhalo::{PermissionRules, Importance};
+//! let rule = PermissionRules {
 //!     path: "/var/log".into(),
 //!     expected_mode: 0o640,
 //!     recursive: true,
@@ -46,8 +46,8 @@
 //!
 //! ## Custom Audit with Error Handling
 //! ```rust
-//! use alhalo::{AuditRule, Importance};
-//! let results = AuditRule::custom_audit("/tmp/does_not_exist".into(), 0o600, Importance::Low);
+//! use alhalo::{PermissionRules, Importance};
+//! let results = PermissionRules::custom_audit("/tmp/does_not_exist".into(), 0o600, Importance::Low);
 //! for res in results {
 //!     if let Some(err) = &res.error {
 //!         println!("Error auditing {}: {}", res.path.display(), err);
@@ -84,7 +84,7 @@ const OTHER_PERMS: u32 = 0o007;
 /// Severity level of audit failure.
 ///
 /// Used to classify the risk of a permission mismatch when auditing file or directory permissions.
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Deserialize)]
 pub enum Severity {
     /// No issue (exact match)
     None,
@@ -181,7 +181,7 @@ where
 /// Used to define and run permission audits for custom configuration structs.
 pub trait AuditPermissions {
     /// Returns a vector of audit rules for the struct.
-    fn rules(&self) -> Vec<AuditRule>;
+    fn rules(&self) -> Vec<PermissionRules>;
 
     /// Runs all audit rules and returns a vector of results.
     fn run_audit_perms(&self) -> Vec<PermissionResults> {
@@ -198,7 +198,7 @@ pub trait AuditPermissions {
 ///
 /// Defines the path, expected mode, recursion, and importance for auditing.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct AuditRule {
+pub struct PermissionRules {
     /// Path to audit
     pub path: PathBuf,
     /// Expected file mode (octal, e.g. 0o640)
@@ -210,7 +210,7 @@ pub struct AuditRule {
 }
 
 /* Needs more robust error handling */
-impl AuditRule {
+impl PermissionRules {
     /// Create a new audit rule and determine the path status.
     ///
     /// Returns the rule and whether the path is a file, directory, or not found.
@@ -221,11 +221,11 @@ impl AuditRule {
     /// * `importance` - Importance level
     ///
     /// # Returns
-    /// Tuple of `AuditRule` and `PathStatus`.
+    /// Tuple of `PermissionRules` and `PathStatus`.
     pub fn new(path: PathBuf, expected_mode: u32, importance: Importance) -> (Self, PathStatus) {
         if !path.exists() {
             return (
-                AuditRule {
+                PermissionRules {
                     path,
                     expected_mode,
                     importance,
@@ -239,7 +239,7 @@ impl AuditRule {
             Ok(meta) => {
                 if meta.is_file() {
                     (
-                        AuditRule {
+                        PermissionRules {
                             path,
                             expected_mode,
                             importance,
@@ -249,7 +249,7 @@ impl AuditRule {
                     )
                 } else if meta.is_dir() {
                     (
-                        AuditRule {
+                        PermissionRules {
                             path,
                             expected_mode,
                             importance,
@@ -259,7 +259,7 @@ impl AuditRule {
                     )
                 } else {
                     (
-                        AuditRule {
+                        PermissionRules {
                             path,
                             expected_mode,
                             importance,
@@ -272,7 +272,7 @@ impl AuditRule {
             Err(e) => {
                 if e.kind() == io::ErrorKind::PermissionDenied {
                     (
-                        AuditRule {
+                        PermissionRules {
                             path,
                             expected_mode,
                             importance,
@@ -282,7 +282,7 @@ impl AuditRule {
                     )
                 } else {
                     (
-                        AuditRule {
+                        PermissionRules {
                             path,
                             expected_mode,
                             importance,
@@ -343,17 +343,32 @@ impl AuditRule {
     pub fn check(&self, visited: &mut HashSet<(u64, u64)>) -> Vec<PermissionResults> {
         let mut results = Vec::new();
 
-        // Symlink handling: skip symlinks at the top level
+        // Symlink handling
         if let Ok(meta) = fs::symlink_metadata(&self.path) {
             if meta.file_type().is_symlink() {
-                results.push(PermissionResults {
+                use crate::audit::symlink::{SymRule, check_symlink};
+                let sym_rule = SymRule {
                     path: self.path.clone(),
-                    status: Status::Strict,
+                    target_link: None, // You may want to pass a specific expected target
+                };
+                let sym_result = check_symlink(&sym_rule);
+                // Map SymResult to PermissionResults for compatibility
+                results.push(PermissionResults {
+                    path: sym_result.path.clone(),
+                    status: if sym_result.pass {
+                        Status::Pass
+                    } else {
+                        Status::Strict
+                    },
                     expected_mode: self.expected_mode,
                     found_mode: 0,
-                    severity: Severity::Info,
+                    severity: if sym_result.pass {
+                        Severity::None
+                    } else {
+                        Severity::Info
+                    },
                     importance: self.importance.clone(),
-                    error: Some(AuditError::Other("Skipped symlink".to_string())),
+                    error: sym_result.error.map(AuditError::Other),
                 });
                 return results;
             }
@@ -427,19 +442,33 @@ impl AuditRule {
                         // Symlink handling: skip symlinks in directory contents
                         if let Ok(meta) = fs::symlink_metadata(&path) {
                             if meta.file_type().is_symlink() {
-                                results.push(PermissionResults {
+                                use crate::audit::symlink::{SymRule, check_symlink};
+                                let sym_rule = SymRule {
                                     path: path.clone(),
-                                    status: Status::Strict,
+                                    target_link: None,
+                                };
+                                let sym_result = check_symlink(&sym_rule);
+                                results.push(PermissionResults {
+                                    path: sym_result.path.clone(),
+                                    status: if sym_result.pass {
+                                        Status::Pass
+                                    } else {
+                                        Status::Strict
+                                    },
                                     expected_mode: self.expected_mode,
                                     found_mode: 0,
-                                    severity: Severity::Info,
+                                    severity: if sym_result.pass {
+                                        Severity::None
+                                    } else {
+                                        Severity::Info
+                                    },
                                     importance: self.importance.clone(),
-                                    error: Some(AuditError::Other("Skipped symlink".to_string())),
+                                    error: sym_result.error.map(AuditError::Other),
                                 });
                                 continue;
                             }
                         }
-                        let sub_rule = AuditRule {
+                        let sub_rule = PermissionRules {
                             path,
                             expected_mode: self.expected_mode,
                             importance: self.importance.clone(),
@@ -486,7 +515,8 @@ impl AuditRule {
     ) -> Vec<PermissionResults> {
         let mut results = Vec::new();
 
-        let (audit_rule, path_status) = AuditRule::new(path.clone(), expected_mode, importance);
+        let (audit_rule, path_status) =
+            PermissionRules::new(path.clone(), expected_mode, importance);
 
         match path_status {
             PathStatus::ValidFile | PathStatus::ValidDirectory => {
@@ -617,6 +647,29 @@ pub fn parse_mode(input: &str) -> Result<u32, AuditError> {
     Err(AuditError::Other("Invalid mode format".to_string()))
 }
 
+use crate::{DataList, DataMap};
+pub fn perm_to_datalist(results: &[PermissionResults]) -> DataList {
+    results
+        .iter()
+        .map(|r| {
+            let mut map = DataMap::new();
+            map.insert("path".to_string(), r.path.display().to_string());
+            map.insert(
+                "expected_mode".to_string(),
+                format!("{:o}", r.expected_mode),
+            );
+            map.insert("found_mode".to_string(), format!("{:o}", r.found_mode));
+            map.insert("status".to_string(), format!("{:?}", r.status));
+            map.insert("severity".to_string(), format!("{:?}", r.severity));
+            map.insert("importance".to_string(), format!("{:?}", r.importance));
+            if let Some(ref err) = r.error {
+                map.insert("error".to_string(), err.to_string());
+            }
+            map
+        })
+        .collect()
+}
+
 /// Error type for permission audit failures and parsing errors.
 ///
 /// Used to represent errors encountered during permission parsing or audit checks.
@@ -700,7 +753,7 @@ mod tests {
 
     #[test]
     fn test_severity_group_other_bits() {
-        let rule = AuditRule {
+        let rule = PermissionRules {
             path: PathBuf::from("/tmp/testfile"),
             expected_mode: 0o640,
             recursive: false,
@@ -712,7 +765,7 @@ mod tests {
 
     #[test]
     fn test_severity_fallback_low() {
-        let rule = AuditRule {
+        let rule = PermissionRules {
             path: PathBuf::from("/tmp/testfile"),
             expected_mode: 0o640,
             recursive: false,
@@ -726,7 +779,7 @@ mod tests {
 
     #[test]
     fn test_severity_exact_match() {
-        let rule = AuditRule {
+        let rule = PermissionRules {
             path: PathBuf::from("/tmp/testfile"),
             expected_mode: 0o640,
             recursive: false,
@@ -737,7 +790,7 @@ mod tests {
 
     #[test]
     fn test_severity_world_write() {
-        let rule = AuditRule {
+        let rule = PermissionRules {
             path: PathBuf::from("/tmp/testfile"),
             expected_mode: 0o640,
             recursive: false,
@@ -748,7 +801,7 @@ mod tests {
 
     #[test]
     fn test_severity_more_permissive() {
-        let rule = AuditRule {
+        let rule = PermissionRules {
             path: PathBuf::from("/tmp/testfile"),
             expected_mode: 0o640,
             recursive: false,
@@ -760,7 +813,7 @@ mod tests {
 
     #[test]
     fn test_severity_stricter() {
-        let rule = AuditRule {
+        let rule = PermissionRules {
             path: PathBuf::from("/tmp/testfile"),
             expected_mode: 0o644,
             recursive: false,

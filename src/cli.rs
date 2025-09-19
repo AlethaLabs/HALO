@@ -4,6 +4,7 @@
 //!
 //! # Features
 //! - Interactive REPL loop (`halo>` prompt)
+//! - Modular command dispatch via handler functions
 //! - `parse` command: Parse and render system files in various formats
 //! - `check` command: Audit file permissions and ownership
 //!   - Supports permission checks (octal, symbolic)
@@ -21,15 +22,17 @@
 //! halo check --toml config.toml
 //! ```
 //!
+//! # Design Notes
+//!
+//! The CLI command dispatch is handled by `run_command`, which delegates to specialized handler functions for each command (`handle_parse`, `handle_check`, etc.). This keeps the CLI logic clean and maintainable.
+//!
 //! # Ownership Checks
 //! To audit file ownership, use `--expect-uid` and/or `--expect-gid` with the `check` command.
 //! Ownership results are displayed after permission audit results.
 use crate::handle_args::{
-    AuditTarget, handle_bash, handle_file, handle_ownership, handle_permissions, handle_summary,
+    AuditTarget, handle_bash, handle_file, handle_ownership, handle_permissions, handle_toml,
 };
-use crate::{
-    Importance, filter, load_toml_rules, parse_mode, render, render_csv, render_json, render_text,
-};
+use alhalo::{Importance, filter, parse_mode, render, render_csv, render_json, render_text};
 use clap::{ArgGroup, Parser, Subcommand};
 use std::io::Write;
 use std::path::PathBuf;
@@ -204,10 +207,13 @@ pub fn cli() {
 }
 
 /// Run a CLI command (for direct execution or from the interactive loop)
-/// Handles all subcommands and dispatches to appropriate logic.
-/// - `Parse`: Parses and renders a file
-/// - `Check`: Audits permissions and/or ownership
-/// - `Bash`: Generates bash completion script
+///
+/// Delegates each subcommand to a specialized handler function:
+/// - `Parse`: Calls `handle_parse` to parse and render a file
+/// - `Check`: Calls `handle_check` to audit permissions and/or ownership
+/// - `Bash`: Calls `handle_bash` to generate bash completion script
+///
+/// This modular approach keeps CLI logic clean and maintainable.
 pub fn run_command(command: &Commands) {
     match command {
         Commands::Parse {
@@ -216,20 +222,7 @@ pub fn run_command(command: &Commands) {
             store,
             file,
         } => {
-            let cpu_data = handle_file(file.clone());
-            match render!(&cpu_data, format, line.clone()) {
-                Ok(output) => {
-                    print!("{}", output);
-                    if let Some(path) = store {
-                        if let Err(e) = std::fs::write(path, &output) {
-                            eprintln!("Failed to store output: {}", e);
-                        } else {
-                            println!("Output stored to {}", path.display());
-                        }
-                    }
-                }
-                Err(e) => eprintln!("Error rendering output: {}", e),
-            }
+            handle_parse(file, format, line, store);
         }
         Commands::Check {
             target,
@@ -239,54 +232,112 @@ pub fn run_command(command: &Commands) {
             importance,
             expect_uid,
             expect_gid,
-            toml,
             store,
+            toml,
         } => {
-            if let Some(toml_path) = toml {
-                match toml_path.to_str() {
-                    Some(path_str) => match load_toml_rules(path_str) {
-                        Ok(toml_results) => match render!(&toml_results, format) {
-                            Ok(output) => print!("{}", output),
-                            Err(e) => eprintln!("Error rendering output: {}", e),
-                        },
-                        Err(e) => eprintln!("Error loading TOML rules: {}", e),
-                    },
-                    None => eprintln!("Invalid TOML file path (not valid UTF-8)"),
-                }
-            } else {
-                let parsed_mode = expect.as_ref().map(|s| parse_mode(s)).transpose();
-                match parsed_mode {
-                    Ok(mode_opt) => {
-                        let results = handle_permissions(
-                            target.clone(),
-                            path.clone(),
-                            mode_opt,
-                            importance.clone(),
-                        );
-                        handle_summary(&results, store.clone(), &format);
-
-                        let ownership_result =
-                            handle_ownership(path.clone(), *expect_uid, *expect_gid);
-                        if expect_uid.is_some() || expect_gid.is_some() {
-                            match ownership_result {
-                                Some(result) => match render!(&result, format) {
-                                    Ok(o) => print!("{}", o),
-                                    Err(e) => eprintln!("Error rendering ownership output: {}", e),
-                                },
-                                None => {
-                                    println!("Ownership check could not be performed.");
-                                }
-                            }
-                        } else {
-                            println!("Ownership check not performed (no UID/GID specified).\n");
-                        }
-                    }
-                    Err(e) => eprintln!("Error parsing expected mode: {}", e),
-                }
-            }
+            handle_check(
+                target, path, format, expect, importance, expect_uid, expect_gid, store, toml,
+            );
         }
         Commands::Bash { out } => {
             handle_bash(out);
         }
+    }
+}
+
+/// Handler for the `parse` command.
+///
+/// Parses the specified file and renders output in the selected format.
+/// Optionally stores output to a file.
+fn handle_parse(
+    file: &Option<PathBuf>,
+    format: &Option<String>,
+    line: &Option<Vec<String>>,
+    store: &Option<PathBuf>,
+) {
+    let cpu_data = handle_file(file.as_ref().map(|p| p.to_owned()));
+    match render!(&cpu_data, format, line.as_ref().map(|l| l.to_owned())) {
+        Ok(output) => {
+            print!("{}", output);
+            if let Some(path) = store {
+                if let Err(e) = std::fs::write(path, &output) {
+                    eprintln!("Failed to store output: {}", e);
+                } else {
+                    println!("Output stored to {}", path.display());
+                }
+            }
+        }
+        Err(e) => eprintln!("Error rendering output: {}", e),
+    }
+}
+
+/// Handler for the `check` command.
+///
+/// Audits file permissions and/or ownership based on CLI arguments.
+/// Supports permission checks, ownership checks, and TOML config loading.
+/// Results are rendered and printed in the selected format.
+fn handle_check(
+    target: &Option<AuditTarget>,
+    path: &Option<PathBuf>,
+    format: &Option<String>,
+    expect: &Option<String>,
+    importance: &Option<Importance>,
+    expect_uid: &Option<u32>,
+    expect_gid: &Option<u32>,
+    store: &Option<PathBuf>,
+    toml: &Option<PathBuf>,
+) {
+    if toml.is_some() {
+        handle_toml();
+        return;
+    }
+    let permission_args = expect.is_some() && importance.is_some();
+    let ownership_args = expect_uid.is_some() || expect_gid.is_some();
+
+    if permission_args && ownership_args {
+        let parsed_mode = expect.as_ref().map(|s| parse_mode(s)).transpose();
+        match parsed_mode {
+            Ok(mode_opt) => {
+                handle_permissions(
+                    target.as_ref().map(|t| t.to_owned()),
+                    path.as_ref().map(|p| p.to_owned()),
+                    mode_opt,
+                    importance.as_ref().map(|i| i.to_owned()),
+                    store.as_ref().map(|s| s.to_owned()),
+                    format,
+                );
+            }
+            Err(e) => eprintln!("Error parsing expected mode: {}", e),
+        }
+        handle_ownership(
+            path.as_ref().map(|p| p.to_owned()),
+            *expect_uid,
+            *expect_gid,
+            format,
+        );
+    } else if permission_args {
+        let parsed_mode = expect.as_ref().map(|s| parse_mode(s)).transpose();
+        match parsed_mode {
+            Ok(mode_opt) => {
+                handle_permissions(
+                    target.as_ref().map(|t| t.to_owned()),
+                    path.as_ref().map(|p| p.to_owned()),
+                    mode_opt,
+                    importance.as_ref().map(|i| i.to_owned()),
+                    store.as_ref().map(|s| s.to_owned()),
+                    format,
+                );
+            }
+            Err(e) => eprintln!("Error parsing expected mode: {}", e),
+        }
+    } else if ownership_args {
+        handle_ownership(
+            path.as_ref().map(|p| p.to_owned()),
+            *expect_uid,
+            *expect_gid,
+            format,
+        );
+    } else {
+        println!("No valid permission or ownership audit arguments provided.\n");
     }
 }

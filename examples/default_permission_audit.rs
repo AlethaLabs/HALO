@@ -1,8 +1,8 @@
-use alhalo::{AuditPermissions, AuditRule, Importance, UserConfig};
+use alhalo::{AuditPermissions, Importance, PermissionRules, UserConfig};
 
 fn main() {
     // Audit /etc/passwd with expected mode 0o644 and medium importance
-    let (rule, _status) = AuditRule::new("/etc/passwd".into(), 0o644, Importance::Medium);
+    let (rule, _status) = PermissionRules::new("/etc/passwd".into(), 0o644, Importance::Medium);
 
     let results = rule.check(&mut std::collections::HashSet::new());
     for result in results {

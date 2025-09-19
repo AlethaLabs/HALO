@@ -1,3 +1,4 @@
+#![doc(html_root_url = "https://docs.rs/alhalo")]
 //! # Aletha Labs: HALO — Host Armor for Linux Operations
 //!
 //! **Audit, parse, and render Linux system configuration and permissions.**
@@ -14,6 +15,7 @@
 //! - Output in pretty text, JSON, or CSV
 //! - CLI and library APIs
 //! - Ownership audit for files and directories
+//! - Symlink audit: check symlink existence and target
 //! - Easy integration into scripts and automation
 //! - Open source under the MIT License
 //! - Actively maintained by Aletha Labs
@@ -21,14 +23,15 @@
 //! ## Library Usage:
 //! This is a new library, there is bound to be some rough edges and breaking changes.
 //! Please open issues or PRs on [GitHub](https://github.com/AlethaLabs/halo) if you have suggestions or find bugs.
+//! Starting Friday - 2025-9-19 - there will be major releases every other Friday.
 //! ```rust
 //! // Note the "render_json" import is necessary for the macro render! to work correctly
-//! use alhalo::{render, AuditRule, Importance, PermissionResults, render_json, PathStatus};
+//! use alhalo::{render, PermissionRules, Importance, PermissionResults, render_json, PathStatus, SymRule, check_symlink};
 //! use std::collections::HashSet;
 //!
 //! fn main() {
 //!     // Create an audit rule for /etc/passwd with expected mode 0o644 and medium importance
-//!     let (rule, status) = AuditRule::new("/etc/passwd".into(), 0o644, Importance::Medium);
+//!     let (rule, status) = PermissionRules::new("/etc/passwd".into(), 0o644, Importance::Medium);
 //!
 //!     // Run the audit (checks permissions and returns results)
 //!     let mut visited = HashSet::new();
@@ -48,6 +51,14 @@
 //!             }
 //!         }
 //!     }
+//!
+//!     // Symlink audit example
+//!     let sym_rule = SymRule {
+//!         path: "/etc/ssl/certs/ca-certificates.crt".into(),
+//!         target_link: None, // Optionally set expected target
+//!     };
+//!     let sym_result = check_symlink(&sym_rule);
+//!     println!("Symlink target: {:?}, Pass: {}", sym_result.target, sym_result.pass);
 //! }
 //! ```
 //! Expected output:
@@ -65,7 +76,7 @@
 //! ```
 //!
 //! ## Quick Start
-//! See (Github)[https://github.com/AlethaLabs/halo] to build CLIfrom source
+//! See [Github](https://github.com/AlethaLabs/halo) to build CLIfrom source
 //! ```bash
 //! cargo run
 //! Welcome to Aletha Labs: HALO - Host Armor for Linux Operations
@@ -93,11 +104,6 @@
 //! cargo run parse --file /proc/cpuinfo --format json
 //! ```
 //!
-//! ## Modules
-//! - [`audit`](crate::audit): Audit logic and rules
-//! - [`render_output`](crate::render_output): Output formatting
-//! - [`cli`](crate::cli): CLI command parsing
-//!
 //! ## More Info
 //! - [GitHub](https://github.com/AlethaLabs/halo)
 //! - [Crates.io](https://crates.io/crates/alhalo)
@@ -108,19 +114,18 @@
 //! _MIT License_
 
 pub mod audit;
-pub mod cli;
-pub mod handle_args;
 pub mod macros;
 pub mod render_output;
 
 pub use audit::{
     audit_permissions::{
-        AuditError, AuditPermissions, AuditRule, Importance, PathStatus, PermissionResults,
-        Severity, Status, parse_mode,
+        AuditError, AuditPermissions, Importance, PathStatus, PermissionResults, PermissionRules,
+        Severity, Status, parse_mode, perm_to_datalist,
     },
     default_permissions::{Log, NetConf, SysConfig, UserConfig},
-    ownership::{OwnershipResult, OwnershipRule, check_ownership},
-    toml_config::{AuditConfig, AuditRuleConfig, load_toml_rules},
+    ownership::{OwnershipResult, OwnershipRule, ownership_to_datalist},
+    symlink::{SymResult, SymRule, check_symlink},
+    toml_config::{AuditConfig, OwnerConfig, PermissionConfig, toml_ownership, toml_permissions},
 };
 
 pub use render_output::{DataList, DataMap, filter, render_csv, render_json, render_text};

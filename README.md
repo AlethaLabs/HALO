@@ -1,3 +1,6 @@
+# [![Crates.io](https://img.shields.io/crates/v/alhalo.svg)](https://crates.io/crates/alhalo)
+# [![Docs.rs](https://docs.rs/alhalo/badge.svg)](https://docs.rs/alhalo)
+# [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 # Aletha Labs - HALO: Host Armor for Linux Operations
 <p  align="center">
     <img src="/assets/al_halo_nobg.png" alt="AL: HALO Logo" width="450"/>
@@ -8,14 +11,23 @@ A Linux System Audit Library and CLI by Aletha Labs
 ## Overview
 HALO is a modular Rust-based tool for auditing, parsing, and rendering Linux system configuration. It is designed to be simple for home users, yet powerful for sysadmins, with a focus on extensibility, actionable output, and maintainable code.
 
+## Architecture & Modularity
+HALO separates its CLI and library code for maintainability and extensibility:
+- The CLI (`src/cli.rs`) parses commands and dispatches to handler functions for each command.
+- Handler functions in `src/handle_args.rs` perform the actual work (parsing, auditing, rendering).
+- The library (`src/`) provides core audit logic, config loading, and output rendering.
+This modular structure makes it easy to add new CLI commands or audit rules.
+
 ## Features
 - Audit system, user, network, and log files for best-practice permissions
 - Ownership audit with UID/GID checks
+- Symlink audit: check symlink existence and target
 - Configurable rules via TOML
 - Bash completion script generation
 - Library APIs - see [docs](https://docs.rs/alhalo)
 - Interactive CLI (must build from this [repository source](https://github.com/AlethaLabs/HALO.git))
-- Output in JSON, CSV, and pretty text formats (JSON only for permission/ownership audits)
+- Output in JSON, CSV, and text formats
+- *** Automatically fix broken permissions *** 
 
 ## Build From Repository
 This is a rust program, so rust is required to build the library.
@@ -61,6 +73,19 @@ halo> check --target user
 Summary: 29 checked, 27 passed, 0 strict, 2 failed
 [!] FAIL: /etc/shadow (found: 640, expected: 600)
     Suggested fix: chmod 600 /etc/shadow
+
+Would you like to apply the suggested fixes? [y/N]: y
+
+ --- Permission Fix Generated ---
+ #!/bin/bash
+ # Halo Permission Fix Script
+
+chmod 600 /etc/shadow
+
+Run suggested fixes? [y/N]: y
+Running fix script as root (requires sudo)...
+[sudo] password for AlethaLabs: password123
+Permissions fixed 
 .....
 ```
 
@@ -74,6 +99,9 @@ cargo run parse --help
 
 # Parse and render a file
 cargo run parse --file /proc/cpuinfo --format json
+
+# Run both permissions and ownership audit at once
+cargo run check --path /etc/shadow --expect 600 --importance high --expect-uid 0 --expect-gid 42 --format json
 
 # Audit user files
 ./target/release/alhalo check --target user
@@ -105,9 +133,11 @@ cargo add alhalo
 
 ### Main Structs & Functions
 
-- **AuditRule**: Defines a file or directory to audit, expected permissions, and importance. Use `AuditRule::new()` to create an audit rule.
+- **PermissionRules**: Defines a file or directory to audit, expected permissions, and importance. Use `PermissionRules::new()` to create a Permission rule.
 - **UserConfig, SysConfig, NetConf, Log**: Built-in audit targets for user, system, network, and log files. Each provides a `.run_audit()` method to perform audits.
 - **PermissionResults**: The result of a permission audit, including severity, status, path, expected and found modes, and errors.
+- **OwnershipRule, OwnershipResult**: Audit file/directory ownership (UID/GID).
+- **SymRule, SymResult**: Audit symlink existence and target.
 - **Importance**: Enum for marking files as High, Medium, or Low importance in audits.
 - **PathStatus**: Enum indicating if a path is a valid file, directory, not found, or permission denied.
 - **render_json, render_csv, render_text**: Functions to render audit results in different formats.
@@ -115,16 +145,30 @@ cargo add alhalo
 
 #### Example
 ```rust
-use alhalo::{AuditRule, Importance, render_json};
+use alhalo::{AuditRule, Importance, render_json, SymRule, check_symlink};
 let (rule, status) = AuditRule::new("/etc/passwd".into(), 0o644, Importance::Medium);
 let mut visited = std::collections::HashSet::new();
 let results = rule.check(&mut visited);
 println!("{}", render_json(&results)?);
+
+// Symlink audit example
+let sym_rule = SymRule {
+  path: "/etc/ssl/certs/ca-certificates.crt".into(),
+  target_link: None, // Optionally set expected target
+};
+let sym_result = check_symlink(&sym_rule);
+println!("Symlink target: {:?}, Pass: {}", sym_result.target, sym_result.pass);
 ```
+## Minimum Supported Rust Version
+This crate is tested with Rust 1.65 and newer. Please use a recent stable toolchain for best results.
 
 ## Contributing
-Contributions are welcome! Please open issues or pull requests for bugs, features, or improvements. 
-Please refer to [CONTRIBUTING.md](CONTRIBUTING.md) for more information and the process of contributing to this project
+Contributions are welcome! Please open issues or pull requests for bugs, features, or improvements.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for:
+- How to add new CLI commands or audit rules
+- Modular workflow for CLI and library contributions
+- Coding standards and review process
 
 ## License
 MIT
@@ -134,3 +178,7 @@ MIT
 
 ---
 For more details, see the [crate documentation](https://docs.rs/alhalo) or run `--help` in the CLI.
+## Extensibility & Testing
+- Add new audit rules by extending the library modules and updating the CLI dispatcher.
+- Add new CLI commands by updating the `Commands` enum and adding handler functions.
+- Unit tests are in `src/` modules; integration tests are in `tests/`.

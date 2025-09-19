@@ -69,10 +69,10 @@ macro_rules! impl_audit {
         $( { path: $path:expr, expected_mode: $expected_mode:expr, importance: $importance:expr, recursive: $recursive:expr } ),*
     ]) => {
         impl AuditPermissions for $struct_name {
-            fn rules(&$s) -> Vec<AuditRule> {
+            fn rules(&$s) -> Vec<PermissionRules> {
                 vec![
                     $(
-                        AuditRule {
+                        PermissionRules {
                             path: $path.clone(),
                             expected_mode: $expected_mode,
                             importance: $importance,

@@ -1,4 +1,7 @@
-use alhalo::cli::{Cli, cli, run_command};
+mod cli;
+mod fix_script;
+mod handle_args;
+use crate::cli::{Cli, cli, run_command};
 use clap::Parser;
 
 fn main() {

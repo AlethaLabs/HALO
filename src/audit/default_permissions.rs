@@ -8,7 +8,7 @@
 //!
 
 use crate::impl_audit;
-use crate::{AuditPermissions, AuditRule, Importance};
+use crate::{AuditPermissions, Importance, PermissionRules};
 use std::path::PathBuf;
 
 /// Audit rules for user and authentication files.

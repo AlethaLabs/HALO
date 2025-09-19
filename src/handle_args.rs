@@ -7,13 +7,18 @@
 //!
 //! Used by the main CLI loop to process commands and render results for users and sysadmins.
 use crate::cli::Cli;
-use crate::{
-    AuditPermissions, AuditRule, Importance, Log, NetConf, PermissionResults, SysConfig,
-    UserConfig, render, render_json,
+use crate::fix_script::generate_fix_script;
+use alhalo::perm_to_datalist;
+use alhalo::{
+    AuditPermissions, Importance, Log, NetConf, PermissionRules, SysConfig, UserConfig, filter,
+    ownership_to_datalist, render, render_csv, render_json, render_text, toml_ownership,
+    toml_permissions,
 };
 use clap::CommandFactory;
 use indexmap::IndexMap;
+use std::env;
 use std::fs;
+use std::io::{self, Write};
 use std::path::PathBuf;
 
 /// A deterministic map of key-value pairs parsed from a file.
@@ -89,7 +94,9 @@ pub fn handle_permissions(
     path: Option<PathBuf>,
     expected_mode: Option<u32>,
     importance: Option<Importance>,
-) -> Vec<PermissionResults> {
+    store: Option<PathBuf>,
+    format: &Option<String>,
+) {
     let mut results = Vec::new();
 
     if let Some(t) = target {
@@ -111,7 +118,6 @@ pub fn handle_permissions(
                 results.extend(logs.run_audit_perms());
             }
             AuditTarget::All => {
-                // Collect results into a temporary vector and then extend the main one.
                 results.extend(UserConfig::default().run_audit_perms());
                 results.extend(SysConfig::default().run_audit_perms());
                 results.extend(NetConf::default().run_audit_perms());
@@ -120,13 +126,111 @@ pub fn handle_permissions(
         }
     } else if let Some(p) = path {
         if let (Some(mode), Some(imp)) = (expected_mode, importance) {
-            results.extend(AuditRule::custom_audit(p, mode, imp));
+            results.extend(PermissionRules::custom_audit(p, mode, imp));
         } else {
             eprintln!("Error: Both --expect and --importance are required with --path.");
         }
     }
-    // The final `results` vector is returned here, containing all the appended results.
-    results
+
+    match format.as_deref() {
+        Some("json") => match render!(&results, format) {
+            Ok(output) => {
+                print!("{}", output);
+                if let Some(ref path) = store {
+                    if let Err(e) = std::fs::write(&path, &output) {
+                        eprintln!("Failed to store output: {}", e);
+                    } else {
+                        println!("JSON output stored to {}", path.display());
+                    }
+                }
+            }
+            Err(e) => eprintln!("Error rendering output: {}", e),
+        },
+        Some("csv") | Some("text") => {
+            let datalist = perm_to_datalist(&results);
+            match render!(&datalist, format, Some(Vec::new())) {
+                Ok(output) => print!("{}", output),
+                Err(e) => eprintln!("Error rendering output: {}", e),
+            }
+        }
+        _ => {
+            eprintln!("Unsupported format for permission results");
+        }
+    }
+
+    // Print summary and suggested fixes
+    let total = results.len();
+    let failed: Vec<_> = results
+        .iter()
+        .filter(|r| r.status == alhalo::Status::Fail)
+        .collect();
+    let passed = results
+        .iter()
+        .filter(|r| r.status == alhalo::Status::Pass)
+        .count();
+    let strict = results
+        .iter()
+        .filter(|r| r.status == alhalo::Status::Strict)
+        .count();
+    println!(
+        "\nSummary: {} checked, {} passed, {} strict, {} failed",
+        total,
+        passed,
+        strict,
+        failed.len()
+    );
+    for r in &failed {
+        println!(
+            "[!] FAIL: {} (found: {:o}, expected: {:o})",
+            r.path.display(),
+            r.found_mode,
+            r.expected_mode
+        );
+        if r.found_mode != r.expected_mode && r.path.is_file() && r.expected_mode != 0 {
+            println!(
+                "    Suggested fix: # chmod {:o} {}",
+                r.expected_mode,
+                r.path.display()
+            );
+        }
+        if let Some(err) = &r.error {
+            println!("    Error: {}", err);
+        }
+    }
+    // If any permissions failed, generate script to fix permissions
+    if !failed.is_empty() {
+        print!("Would you like to apply the suggested fixes? [y/N]: ");
+        io::stdout().flush().ok();
+        let mut answer = String::new();
+        if io::stdin().read_line(&mut answer).is_ok() {
+            if answer.trim().eq_ignore_ascii_case("y") {
+                let script = generate_fix_script(&results);
+                println!("\n --- Permission Fix Generated --- \n{}\n", script);
+                print!("Run suggested fixes? [y/N]: ");
+                io::stdout().flush().ok();
+                let mut run_answer = String::new();
+                if io::stdin().read_line(&mut run_answer).is_ok() {
+                    if run_answer.trim().eq_ignore_ascii_case("y") {
+                        let tmp_path = "/tmp/fix_permissions.sh";
+                        if let Err(e) = std::fs::write(tmp_path, &script) {
+                            eprintln!("Failed to write script: {}", e);
+                        } else {
+                            println!("Running fix script as root (requires sudo)...");
+                            let status = std::process::Command::new("sudo")
+                                .arg("bash")
+                                .arg(tmp_path)
+                                .status();
+                            match status {
+                                Ok(s) if s.success() => println!("Permissions fixed"),
+                                Ok(s) => eprintln!("Script exited with: {}", s),
+                                Err(e) => eprintln!("Failed to run script: {}", e),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Handles ownership audit requests from the CLI.
@@ -144,18 +248,36 @@ pub fn handle_ownership(
     path: Option<PathBuf>,
     expect_uid: Option<u32>,
     expect_gid: Option<u32>,
-) -> Option<crate::audit::ownership::OwnershipResult> {
+    format: &Option<String>,
+) {
     if let Some(path_val) = path {
         if expect_uid.is_some() || expect_gid.is_some() {
-            let rule = crate::audit::ownership::OwnershipRule {
-                path: path_val,
-                expected_uid: expect_uid.unwrap_or(0),
-                expected_gid: expect_gid.unwrap_or(0),
-            };
-            return Some(crate::audit::ownership::check_ownership(&rule));
+            let (rule, _status) = alhalo::OwnershipRule::new(
+                path_val,
+                expect_uid.unwrap_or(0),
+                expect_gid.unwrap_or(0),
+                true,
+            );
+            let result = rule.check_ownership();
+            match format.as_deref() {
+                Some("json") => match render!(&result, format) {
+                    Ok(o) => print!("{}", o),
+                    Err(e) => eprintln!("Error rendering ownership output: {}", e),
+                },
+                Some("csv") | Some("text") => {
+                    let datalist = ownership_to_datalist(&[result]);
+                    match render!(&datalist, format, Some(Vec::new())) {
+                        Ok(o) => print!("{}", o),
+                        Err(e) => eprintln!("Error rendering ownership output: {}", e),
+                    }
+                }
+                _ => eprintln!("Unsupported format for ownership results"),
+            }
+            // Optionally, print summary or suggested fixes here if desired
+            return;
         }
     }
-    None
+    println!("Ownership check could not be performed.");
 }
 
 /// Handler for Bash completion script generation
@@ -176,74 +298,51 @@ pub fn handle_bash(out: &str) {
     }
 }
 
-/// Handles summary output for permission audit results.
-/// Prints summary statistics and details for failed results.
-///
-/// # Arguments
-/// * `results` - Slice of PermissionResults to summarize
-/// * `store` - Optional path to store JSON output
-/// * `format` - Output format (Some("json"), "pretty", etc)
-pub fn handle_summary(
-    results: &[crate::PermissionResults],
-    store: Option<std::path::PathBuf>,
-    format: &Option<String>,
-) {
-    let total = results.len();
-    let failed: Vec<_> = results
-        .iter()
-        .filter(|r| r.status == crate::Status::Fail)
-        .collect();
-    let passed = results
-        .iter()
-        .filter(|r| r.status == crate::Status::Pass)
-        .count();
-    let strict = results
-        .iter()
-        .filter(|r| r.status == crate::Status::Strict)
-        .count();
+pub fn handle_toml() {
+    // Get TOML file path and format from CLI args (simple version: env vars or prompt)
+    let args: Vec<String> = env::args().collect();
+    let toml_path = args.iter().find(|a| a.ends_with(".toml"));
+    let format = args.iter().find(|a| a == &"--format").and_then(|_| {
+        let idx = args.iter().position(|a| a == "--format");
+        idx.and_then(|i| args.get(i + 1))
+    });
 
-    match render!(&results, format) {
-        Ok(output) => {
-            print!("{}", output);
-            if let Some(path) = store {
-                // Only store JSON output
-                if format.as_deref() == Some("json") {
-                    if let Err(e) = std::fs::write(&path, &output) {
-                        eprintln!("Failed to store output: {}", e);
-                    } else {
-                        println!("JSON output stored to {}", path.display());
-                    }
-                } else {
-                    println!("Store is only supported for JSON output. Use --format json.");
-                }
-            }
-            println!(
-                "\nSummary: {} checked, {} passed, {} strict, {} failed",
-                total,
-                passed,
-                strict,
-                failed.len()
-            );
-            for r in failed {
-                println!(
-                    "[!] FAIL: {} (found: {:o}, expected: {:o})",
-                    r.path.display(),
-                    r.found_mode,
-                    r.expected_mode
-                );
-                // Suggest chmod if path is file and expected_mode is not 0
-                if r.found_mode != r.expected_mode && r.path.is_file() && r.expected_mode != 0 {
-                    println!(
-                        "    Suggested fix: # chmod {:o} {}",
-                        r.expected_mode,
-                        r.path.display()
-                    );
-                }
-                if let Some(err) = &r.error {
-                    println!("    Error: {}", err);
-                }
-            }
+    let format = format.map(|s| s.to_string()).or(Some("json".to_string()));
+
+    if let Some(path_str) = toml_path {
+        // Permissions
+        match toml_permissions(path_str) {
+            Ok(toml_permission_results) => match render!(&toml_permission_results, &format) {
+                Ok(output) => print!("{}", output),
+                Err(e) => eprintln!("Error rendering output: {}", e),
+            },
+            Err(e) => eprintln!("Error loading TOML permission rules: {}", e),
         }
-        Err(e) => eprintln!("Error rendering output: {}", e),
+        // Ownership
+        match toml_ownership(path_str) {
+            Ok(toml_owner_results) => {
+                if !toml_owner_results.is_empty() {
+                    match format.as_deref() {
+                        Some("json") => match render!(&toml_owner_results, &format) {
+                            Ok(output) => print!("{}", output),
+                            Err(e) => eprintln!("Error rendering ownership output: {}", e),
+                        },
+                        Some("csv") | Some("text") => {
+                            let datalist = ownership_to_datalist(&toml_owner_results);
+                            match render!(&datalist, &format, Some(Vec::new())) {
+                                Ok(output) => print!("{}", output),
+                                Err(e) => eprintln!("Error rendering ownership output: {}", e),
+                            }
+                        }
+                        _ => eprintln!("Unsupported format for ownership results"),
+                    }
+                }
+            }
+            Err(e) => eprintln!("Error loading TOML ownership rules: {}", e),
+        }
+    } else {
+        eprintln!(
+            "No TOML file path provided. Usage: halo check --toml config.toml [--format json|csv|text]"
+        );
     }
 }
