@@ -4,13 +4,13 @@
 //!
 //! # Features
 //! - Interactive REPL loop (`halo>` prompt)
-//! - Modular command dispatch via handler functions
 //! - `parse` command: Parse and render system files in various formats
 //! - `check` command: Audit file permissions and ownership
 //!   - Supports permission checks (octal, symbolic)
 //!   - Supports ownership checks via `--expect-uid` and `--expect-gid`
 //!   - Can load custom audit rules from TOML
 //! - Output formats: pretty, json, csv
+//! - `net` command: Network discovery and monitoring tools
 //! - Bash completion script generation
 //!
 //! # Example Usage
@@ -39,7 +39,7 @@ use std::path::PathBuf;
 
 /// Command-line interface for HALO
 #[derive(Parser, Debug)]
-#[command(author = "Aletha Labs", version = "0.0.1", about = "Simple for the home user, Power for the sysadmin", long_about = None,
+#[command(author = "Aletha Labs", version = "0.3.0", about = "Simple for the home user, Power for the sysadmin", long_about = None,
 help_template = "\
 {name}-{version} - {author}
 {about}
@@ -152,6 +152,8 @@ pub enum Commands {
         #[arg(short = 's', long, help = "Store JSON output to file")]
         store: Option<PathBuf>,
     },
+
+    /// Network discovery and analysis tools
     Net {
         #[arg(
             short = 'f',
@@ -180,12 +182,13 @@ pub enum Commands {
 /// Interactive CLI loop for HALO
 ///
 /// Presents a `halo>` prompt and parses user commands interactively.
-/// Supports `parse`, `check`, `exit`, and `help` commands.
+/// Supports `parse`, `check`, `net`, `bash`, `exit`, and `help` commands.
 ///
 /// Usage:
 /// ```text
 /// halo> check --path /etc/shadow --expect 640 --expect-uid 0 --expect-gid 42
 /// halo> parse --file /proc/cpuinfo --format json
+/// halo> net --devices --format json
 /// ```
 pub fn cli() {
     loop {
@@ -193,9 +196,17 @@ pub fn cli() {
         let _ = std::io::stdout().flush();
 
         let mut input = String::new();
-        if std::io::stdin().read_line(&mut input).is_err() {
-            eprintln!("Failed to read input");
-            continue;
+        match std::io::stdin().read_line(&mut input) {
+            Ok(0) => {
+                // EOF reached (e.g., when input is piped or Ctrl+D is pressed)
+                println!(); // Print newline for clean exit
+                break;
+            }
+            Err(_) => {
+                eprintln!("Failed to read input");
+                continue;
+            }
+            Ok(_) => {} // Continue processing the input
         }
 
         let input = input.trim();
@@ -206,7 +217,7 @@ pub fn cli() {
             break;
         }
         if input == "help" {
-            println!("Available commands: parse, check, exit, help");
+            println!("Available commands: parse, check, net, bash, exit, help");
             continue;
         }
 
@@ -227,6 +238,7 @@ pub fn cli() {
 /// Delegates each subcommand to a specialized handler function:
 /// - `Parse`: Calls `handle_parse` to parse and render a file
 /// - `Check`: Calls `handle_check` to audit permissions and/or ownership
+/// - `Net`: Calls `handle_net` to perform network discovery
 /// - `Bash`: Calls `handle_bash` to generate bash completion script
 ///
 /// This modular approach keeps CLI logic clean and maintainable.

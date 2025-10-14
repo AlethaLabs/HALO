@@ -41,9 +41,8 @@ git --version
 ```
 - After rust is installed and you confirmed your git installation, you can clone this repository
 ```bash
-mkdir halo_build
-cd halo_build
 git clone https://github.com/AlethaLabs/HALO.git
+cd HALO
 ```
 - Then build with rusts package manager/build tool - Cargo:
 ```bash

@@ -147,7 +147,7 @@ where
         for item in self {
             output.push_str(&format!("  {}\n", item.pretty_print()));
         }
-        output.push_str(&format!("\nTotal results: {}", self.len()));
+        output.push_str(&format!("\nTotal results: {}\n", self.len()));
         output
     }
 }

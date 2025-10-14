@@ -30,7 +30,7 @@ All notable changes to this project will be documented in this file.
 - Updated documentation/readme
 
 ## [0.2.0] - 2025-9-19
-- **Starting this day (Friday - 2025-9-19) there will be major releases every other Friday**
+- **Starting this day (Friday - 2025-9-19) there will be minor-major releases once per month**
 - Changed AuditRule -> PermissionRules for clarity of use
 - Added symbolic link detection/auditing functionality
 - Updated documentation in [lib](lib.rs), and [README](README.md)
@@ -43,3 +43,11 @@ All notable changes to this project will be documented in this file.
 - Improved error handling/reporting
 - Added beginnings of [fix_script](audit/fix_script.rs) which can automaticaly fix mismatched permssions
 
+## [0.3.0] - 2025-10-14
+- Fixed several bugs with CLI
+- **Deprecated render! macro**
+    - Added new **Renderable** trait for code hygiene
+- Added start of network monitoring
+    - Discover devices on local network
+- Updated examples/tests
+- Updated documentation
