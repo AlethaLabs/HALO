@@ -4,6 +4,7 @@
 //! - Pretty-printed JSON
 //! - CSV (with optional column filtering)
 //! - Human-readable text blocks
+//! - Unified trait-based rendering for consistent output handling
 //!
 //! Used by the CLI and macro system to display results in a user-friendly way.
 
@@ -19,6 +20,137 @@ pub type DataMap = IndexMap<String, String>;
 
 /// A list of parsed data maps, representing structured file contents.
 pub type DataList = Vec<DataMap>;
+
+/// Wrapper for parsed data that supports filtering and rendering
+#[derive(Debug, Clone)]
+pub struct ParsedData {
+    pub data: DataList,
+    pub filter_keys: Vec<String>,
+}
+
+impl ParsedData {
+    pub fn new(data: DataList) -> Self {
+        Self {
+            data,
+            filter_keys: Vec::new(),
+        }
+    }
+
+    pub fn with_filter(data: DataList, filter_keys: Vec<String>) -> Self {
+        Self { data, filter_keys }
+    }
+
+    /// Get the filtered data for serialization
+    pub fn filtered_data(&self) -> DataList {
+        filter(&self.data, &self.filter_keys)
+    }
+}
+
+impl Serialize for ParsedData {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.filtered_data().serialize(serializer)
+    }
+}
+
+/// Supported output formats for CLI commands
+#[derive(Debug, Clone)]
+pub enum OutputFormat {
+    Json,
+    Csv,
+    Text,
+    Pretty,
+}
+
+impl OutputFormat {
+    /// Parse format string into OutputFormat enum
+    pub fn from_str(s: Option<&str>) -> Self {
+        match s {
+            Some("json") => Self::Json,
+            Some("csv") => Self::Csv,
+            Some("text") => Self::Text,
+            _ => Self::Pretty,
+        }
+    }
+}
+
+/// Trait for types that can be rendered in multiple output formats
+pub trait Renderable {
+    /// Convert to DataList for CSV/text rendering
+    fn to_datalist(&self) -> DataList;
+    
+    /// Custom pretty-print format (optional override)
+    fn pretty_print(&self) -> String {
+        "Output available in JSON, CSV, or text format.".to_string()
+    }
+    
+    /// Render in the specified format
+    fn render(&self, format: OutputFormat) -> io::Result<String>
+    where
+        Self: Serialize,
+    {
+        match format {
+            OutputFormat::Json => render_json(&self),
+            OutputFormat::Csv => render_csv(&self.to_datalist(), &[]),
+            OutputFormat::Text => render_text(&self.to_datalist(), &[]),
+            OutputFormat::Pretty => Ok(self.pretty_print()),
+        }
+    }
+    
+    /// Render and print to stdout with error handling
+    fn render_and_print(&self, format: Option<&str>)
+    where
+        Self: Serialize,
+    {
+        let output_format = OutputFormat::from_str(format);
+        match self.render(output_format) {
+            Ok(output) => print!("{}", output),
+            Err(e) => eprintln!("Error rendering output: {}", e),
+        }
+    }
+}
+
+impl Renderable for ParsedData {
+    fn to_datalist(&self) -> DataList {
+        self.filtered_data()
+    }
+
+    fn pretty_print(&self) -> String {
+        let filtered_data = self.filtered_data();
+        match render_text(&filtered_data, &[]) {
+            Ok(output) => output,
+            Err(_) => "Error rendering data".to_string(),
+        }
+    }
+}
+
+/// Implement Renderable for Vec<T> where T: Renderable
+impl<T> Renderable for Vec<T>
+where
+    T: Renderable + Serialize,
+{
+    fn to_datalist(&self) -> DataList {
+        self.iter()
+            .flat_map(|item| item.to_datalist())
+            .collect()
+    }
+    
+    fn pretty_print(&self) -> String {
+        if self.is_empty() {
+            return "No results found.".to_string();
+        }
+        
+        let mut output = String::new();
+        output.push_str(&format!("Results Found:\n"));
+        for item in self {
+            output.push_str(&format!("  {}\n", item.pretty_print()));
+        }
+        output.push_str(&format!("\nTotal results: {}", self.len()));
+        output
+    }
+}
 /// Renders any serializable data as pretty-printed JSON.
 ///
 /// # Arguments

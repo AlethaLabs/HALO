@@ -19,15 +19,17 @@ HALO separates its CLI and library code for maintainability and extensibility:
 This modular structure makes it easy to add new CLI commands or audit rules.
 
 ## Features
-- Audit system, user, network, and log files for best-practice permissions
-- Ownership audit with UID/GID checks
-- Symlink audit: check symlink existence and target
-- Configurable rules via TOML
-- Bash completion script generation
-- Library APIs - see [docs](https://docs.rs/alhalo)
-- Interactive CLI (must build from this [repository source](https://github.com/AlethaLabs/HALO.git))
-- Output in JSON, CSV, and text formats
-*** Automatically fix broken permissions *** 
+- **System Audits**: Audit system, user, network, and log files for best-practice permissions
+- **Ownership Audits**: UID/GID checks with detailed reporting
+- **Network Discovery**: Scan and analyze local network devices via ARP table
+- **Symlink Audits**: Check symlink existence and target validation
+- **Configurable Rules**: Define custom audit rules via TOML configuration
+- **Multiple Output Formats**: JSON, CSV, text, and pretty-print formats
+- **Trait-Based Rendering**: Consistent, extensible output formatting system
+- **Interactive Fixes**: Automatically generate and apply permission fix scripts
+- **Bash Completion**: Generate completion scripts for enhanced CLI experience
+- **Library APIs**: Comprehensive Rust API for integration - see [docs](https://docs.rs/alhalo)
+- **Interactive CLI**: REPL-style interface for efficient system administration 
 
 ## Build From Repository
 This is a rust program, so rust is required to build the library.
@@ -100,6 +102,10 @@ cargo run parse --help
 # Parse and render a file
 cargo run parse --file /proc/cpuinfo --format json
 
+# Network discovery - scan local network devices
+cargo run net --devices --format json
+cargo run net -d  # Pretty print format
+
 # Run both permissions and ownership audit at once
 cargo run check --path /etc/shadow --expect 600 --importance high --expect-uid 0 --expect-gid 42 --format json
 
@@ -133,31 +139,42 @@ cargo add alhalo
 
 ### Main Structs & Functions
 
-- **PermissionRules**: Defines a file or directory to audit, expected permissions, and importance. Use `PermissionRules::new()` to create a Permission rule.
-- **UserConfig, SysConfig, NetConf, Log**: Built-in audit targets for user, system, network, and log files. Each provides a `.run_audit()` method to perform audits.
-- **PermissionResults**: The result of a permission audit, including severity, status, path, expected and found modes, and errors.
-- **OwnershipRule, OwnershipResult**: Audit file/directory ownership (UID/GID).
-- **SymRule, SymResult**: Audit symlink existence and target.
-- **Importance**: Enum for marking files as High, Medium, or Low importance in audits.
-- **PathStatus**: Enum indicating if a path is a valid file, directory, not found, or permission denied.
-- **render_json, render_csv, render_text**: Functions to render audit results in different formats.
-- **parse_mode**: Parse permission strings (octal or symbolic) into numeric modes for auditing.
+- **PermissionRules**: Defines files/directories to audit with expected permissions and importance. Use `PermissionRules::new()` to create audit rules.
+- **Devices**: Represents network devices discovered via ARP table parsing. Implements the `Renderable` trait for consistent output formatting.
+- **PermissionResults, OwnershipResult**: Results of permission and ownership audits, including severity, status, paths, expected vs found values, and errors.
+- **UserConfig, SystemPermissionConfig, NetworkConfig, LogConfig**: Built-in audit targets for different system components. Each provides audit methods.
+- **Renderable trait**: Unified rendering interface implemented by all data structures for consistent output across formats (JSON, CSV, Pretty, Text).
+- **OutputFormat**: Enum supporting Json, Csv, Pretty, and Text output formats.
+- **Severity**: Enum for marking audit findings as Critical, High, Medium, Low, or None.
+- **get_arp_devices()**: Function to discover network devices by parsing the system ARP table.
+- **render_and_print()**: Method available on all `Renderable` types for consistent output formatting.
 
 #### Example
 ```rust
-use alhalo::{AuditRule, Importance, render_json, SymRule, check_symlink};
-let (rule, status) = AuditRule::new("/etc/passwd".into(), 0o644, Importance::Medium);
+use alhalo::{
+    audit::{PermissionRules, Importance, default_permissions::SystemPermissionConfig},
+    render_output::{Renderable, OutputFormat}
+};
+
+// Network device discovery
+let devices = alhalo::audit::networking::discovery::get_arp_devices()
+    .expect("Failed to discover network devices");
+devices.render_and_print(&OutputFormat::Json);
+
+// Define custom audit rules
+let (rule, _status) = PermissionRules::new("/etc/shadow".into(), 0o600, Importance::High);
 let mut visited = std::collections::HashSet::new();
 let results = rule.check(&mut visited);
-println!("{}", render_json(&results)?);
+results.render_and_print(&OutputFormat::Pretty);
 
-// Symlink audit example
-let sym_rule = SymRule {
-  path: "/etc/ssl/certs/ca-certificates.crt".into(),
-  target_link: None, // Optionally set expected target
-};
-let sym_result = check_symlink(&sym_rule);
-println!("Symlink target: {:?}, Pass: {}", sym_result.target, sym_result.pass);
+// Use custom audit for simpler one-off checks
+let results = PermissionRules::custom_audit("/etc/shadow".into(), 0o600, Importance::High);
+results.render_and_print(&OutputFormat::Csv);
+
+// Use default system audits
+let system_config = SystemPermissionConfig::default();
+let results = system_config.audit_permissions();
+results.render_and_print(&OutputFormat::Csv);
 ```
 ## Minimum Supported Rust Version
 This crate is tested with Rust 1.65 and newer. Please use a recent stable toolchain for best results.

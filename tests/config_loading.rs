@@ -12,7 +12,7 @@ fn test_valid_toml_config_loading() {
 
     // Build TOML config referencing the temp file
     let toml_content = format!(
-        "[[rules]]\npath = \"{}\"\nexpected_mode = 644\nimportance = \"Medium\"\nrecursive = false\n",
+        "[[perm_rules]]\npath = \"{}\"\nexpected_mode = 644\nimportance = \"Medium\"\nrecursive = false\n",
         target_path
     );
     let mut toml_file = tempfile::NamedTempFile::new().expect("Failed to create TOML file");

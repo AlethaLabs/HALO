@@ -8,11 +8,10 @@
 //! Used by the main CLI loop to process commands and render results for users and sysadmins.
 use crate::cli::Cli;
 use crate::fix_script::generate_fix_script;
-use alhalo::perm_to_datalist;
+use alhalo::audit::networking::discovery::{get_arp_devices};
 use alhalo::{
-    AuditPermissions, Importance, Log, NetConf, PermissionRules, SysConfig, UserConfig, filter,
-    ownership_to_datalist, render, render_csv, render_json, render_text, toml_ownership,
-    toml_permissions,
+    AuditPermissions, Importance, Log, NetConf, PermissionRules, SysConfig, UserConfig,
+    toml_ownership, toml_permissions, Renderable,
 };
 use clap::CommandFactory;
 use indexmap::IndexMap;
@@ -132,11 +131,15 @@ pub fn handle_permissions(
         }
     }
 
-    match format.as_deref() {
-        Some("json") => match render!(&results, format) {
-            Ok(output) => {
-                print!("{}", output);
-                if let Some(ref path) = store {
+    // Handle output rendering
+    if format.is_some() {
+        // Use trait-based rendering for specified formats
+        results.render_and_print(format.as_deref());
+        
+        // Handle file storage for JSON format
+        if format.as_deref() == Some("json") {
+            if let Some(ref path) = store {
+                if let Ok(output) = results.render(alhalo::render_output::OutputFormat::Json) {
                     if let Err(e) = std::fs::write(&path, &output) {
                         eprintln!("Failed to store output: {}", e);
                     } else {
@@ -144,17 +147,6 @@ pub fn handle_permissions(
                     }
                 }
             }
-            Err(e) => eprintln!("Error rendering output: {}", e),
-        },
-        Some("csv") | Some("text") => {
-            let datalist = perm_to_datalist(&results);
-            match render!(&datalist, format, Some(Vec::new())) {
-                Ok(output) => print!("{}", output),
-                Err(e) => eprintln!("Error rendering output: {}", e),
-            }
-        }
-        _ => {
-            eprintln!("Unsupported format for permission results");
         }
     }
 
@@ -259,20 +251,7 @@ pub fn handle_ownership(
                 true,
             );
             let result = rule.check_ownership();
-            match format.as_deref() {
-                Some("json") => match render!(&result, format) {
-                    Ok(o) => print!("{}", o),
-                    Err(e) => eprintln!("Error rendering ownership output: {}", e),
-                },
-                Some("csv") | Some("text") => {
-                    let datalist = ownership_to_datalist(&[result]);
-                    match render!(&datalist, format, Some(Vec::new())) {
-                        Ok(o) => print!("{}", o),
-                        Err(e) => eprintln!("Error rendering ownership output: {}", e),
-                    }
-                }
-                _ => eprintln!("Unsupported format for ownership results"),
-            }
+            result.render_and_print(format.as_deref());
             // Optionally, print summary or suggested fixes here if desired
             return;
         }
@@ -312,9 +291,8 @@ pub fn handle_toml() {
     if let Some(path_str) = toml_path {
         // Permissions
         match toml_permissions(path_str) {
-            Ok(toml_permission_results) => match render!(&toml_permission_results, &format) {
-                Ok(output) => print!("{}", output),
-                Err(e) => eprintln!("Error rendering output: {}", e),
+            Ok(toml_permission_results) => {
+                toml_permission_results.render_and_print(format.as_deref());
             },
             Err(e) => eprintln!("Error loading TOML permission rules: {}", e),
         }
@@ -322,27 +300,28 @@ pub fn handle_toml() {
         match toml_ownership(path_str) {
             Ok(toml_owner_results) => {
                 if !toml_owner_results.is_empty() {
-                    match format.as_deref() {
-                        Some("json") => match render!(&toml_owner_results, &format) {
-                            Ok(output) => print!("{}", output),
-                            Err(e) => eprintln!("Error rendering ownership output: {}", e),
-                        },
-                        Some("csv") | Some("text") => {
-                            let datalist = ownership_to_datalist(&toml_owner_results);
-                            match render!(&datalist, &format, Some(Vec::new())) {
-                                Ok(output) => print!("{}", output),
-                                Err(e) => eprintln!("Error rendering ownership output: {}", e),
-                            }
-                        }
-                        _ => eprintln!("Unsupported format for ownership results"),
-                    }
+                    toml_owner_results.render_and_print(format.as_deref());
                 }
-            }
+            },
             Err(e) => eprintln!("Error loading TOML ownership rules: {}", e),
         }
     } else {
         eprintln!(
             "No TOML file path provided. Usage: halo check --toml config.toml [--format json|csv|text]"
         );
+    }
+}
+
+/// Handle Networking
+pub fn handle_net(format: &Option<String>, devices: bool) {
+    if devices {
+        match get_arp_devices() {
+            Ok(results) => {
+                results.render_and_print(format.as_deref());
+            },
+            Err(e) => eprintln!("Error discovering network devices: {}", e),
+        }
+    } else {
+        eprintln!("Network discovery requires the --devices flag");
     }
 }

@@ -30,9 +30,9 @@
 //! To audit file ownership, use `--expect-uid` and/or `--expect-gid` with the `check` command.
 //! Ownership results are displayed after permission audit results.
 use crate::handle_args::{
-    AuditTarget, handle_bash, handle_file, handle_ownership, handle_permissions, handle_toml,
+    AuditTarget, handle_bash, handle_file, handle_ownership, handle_permissions, handle_toml, handle_net,
 };
-use alhalo::{Importance, filter, parse_mode, render, render_csv, render_json, render_text};
+use alhalo::{Importance, parse_mode};
 use clap::{ArgGroup, Parser, Subcommand};
 use std::io::Write;
 use std::path::PathBuf;
@@ -152,6 +152,22 @@ pub enum Commands {
         #[arg(short = 's', long, help = "Store JSON output to file")]
         store: Option<PathBuf>,
     },
+    Net {
+        #[arg(
+            short = 'f',
+            long,
+            help = "Specify format output: Example - net --format json"
+        )]
+        format: Option<String>,
+
+        #[arg(
+            short = 'd',
+            long,
+            action = clap::ArgAction::SetTrue,
+            help = "Scan your network for devices: Example - net --devices"
+        )]
+        devices: bool,
+    },
 
     /// Generate a Bash completion script for the CLI
     Bash {
@@ -239,24 +255,33 @@ pub fn run_command(command: &Commands) {
                 target, path, format, expect, importance, expect_uid, expect_gid, store, toml,
             );
         }
+        Commands::Net { format, devices } => {
+            handle_net(format, *devices);
+        }
         Commands::Bash { out } => {
             handle_bash(out);
         }
     }
 }
 
-/// Handler for the `parse` command.
+/// Handler for the `parse` command
 ///
-/// Parses the specified file and renders output in the selected format.
-/// Optionally stores output to a file.
+/// Parses the specified file and renders output in the selected format
+/// Optionally stores output to a file
 fn handle_parse(
     file: &Option<PathBuf>,
     format: &Option<String>,
     line: &Option<Vec<String>>,
     store: &Option<PathBuf>,
 ) {
-    let cpu_data = handle_file(file.as_ref().map(|p| p.to_owned()));
-    match render!(&cpu_data, format, line.as_ref().map(|l| l.to_owned())) {
+    use alhalo::{ParsedData, Renderable, OutputFormat};
+    
+    let data = handle_file(file.as_ref().map(|p| p.to_owned()));
+    let filter_keys = line.as_ref().cloned().unwrap_or_default();
+    let parsed_data = ParsedData::with_filter(data, filter_keys);
+    
+    let output_format = OutputFormat::from_str(format.as_deref());
+    match parsed_data.render(output_format) {
         Ok(output) => {
             print!("{}", output);
             if let Some(path) = store {
@@ -291,7 +316,7 @@ fn handle_check(
         handle_toml();
         return;
     }
-    let permission_args = expect.is_some() && importance.is_some();
+    let permission_args = target.is_some() || (expect.is_some() && importance.is_some());
     let ownership_args = expect_uid.is_some() || expect_gid.is_some();
 
     if permission_args && ownership_args {

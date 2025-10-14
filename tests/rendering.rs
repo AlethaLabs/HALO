@@ -29,8 +29,8 @@ fn test_render_csv() {
 fn test_render_text() {
     let data = sample_data();
     let text = render_text(&data, &[]).expect("Should render text");
-    assert!(text.contains("Block 0:"));
     assert!(text.contains("key1: value1"));
+    assert!(text.contains("key2: value2"));
 }
 
 #[test]

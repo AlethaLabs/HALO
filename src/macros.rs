@@ -1,11 +1,14 @@
-//! Macros for output rendering and audit trait implementation in HALO.
+//! Macros for audit trait implementation in HALO.
 //!
 //! This module provides:
-//! - `render!`: Macro for rendering CLI output in JSON, CSV, or text formats
 //! - `impl_audit!`: Macro to implement the `AuditPermissions` trait for config structs
 //!
-//! These macros reduce boilerplate and standardize output formatting and audit rule definitions.
-/// Macro for rendering output in various formats for CLI commands.
+//! Note: The `render!` macro has been deprecated in favor of the trait-based rendering system.
+//! Use the `Renderable` trait and `.render_and_print()` method instead.
+/// DEPRECATED: Macro for rendering output in various formats for CLI commands.
+///
+/// This macro is deprecated in favor of the trait-based rendering system.
+/// Use the `Renderable` trait and `.render_and_print()` method instead.
 ///
 /// # Usage
 /// - For the `Parse` command: `render!(data, format, line)`
@@ -14,6 +17,10 @@
 ///   - Only supports JSON output.
 ///
 /// Returns a `Result<String, std::io::Error>` with the rendered output or error.
+#[deprecated(
+    since = "0.1.0",
+    note = "Use the Renderable trait and render_and_print() method instead"
+)]
 #[macro_export]
 macro_rules! render {
     // Case 1: For the Parse command, which has a line filter

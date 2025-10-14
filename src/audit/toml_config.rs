@@ -21,8 +21,14 @@
 //! expected_uid = 0
 //! expected_gid = 0
 //! ```
-use crate::{
-    Importance, OwnershipResult, OwnershipRule, PermissionResults, PermissionRules, parse_mode,
+use crate::audit::{
+    permissions::{
+        audit_permissions::{
+            PermissionResults, PermissionRules, parse_mode,
+            Importance, 
+        },
+    },
+    ownership::ownership::{OwnershipResult, OwnershipRule},
 };
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -74,10 +80,12 @@ pub struct OwnerConfig {
 ///
 /// Fields:
 /// - `perm_rules`: List of permission audit rules to apply.
-/// - `owner_rules`: List of ownership audit rules to apply.
+/// - `owner_rules`: List of ownership audit rules to apply (optional).
 #[derive(Debug, Deserialize)]
 pub struct AuditConfig {
+    #[serde(default)]
     pub perm_rules: Vec<PermissionConfig>,
+    #[serde(default)]
     pub owner_rules: Vec<OwnerConfig>,
 }
 
@@ -233,7 +241,7 @@ mod tests {
         File::create(&file_path).unwrap();
         let toml = format!(
             r#"
-            [[rules]]
+            [[perm_rules]]
             path = "{}"
             expected_mode = 644
             importance = "Medium"
@@ -254,7 +262,7 @@ mod tests {
         File::create(&file_path).unwrap();
         let toml = format!(
             r#"
-            [[rules]]
+            [[perm_rules]]
             path = "{}"
             expected_mode = "u=rw,g=r,o="
             importance = "High"
@@ -275,7 +283,7 @@ mod tests {
         File::create(&file_path).unwrap();
         let toml = format!(
             r#"
-            [[rules]]
+            [[perm_rules]]
             path = "{}"
             expected_mode = "notamode"
             importance = "Low"
@@ -294,7 +302,7 @@ mod tests {
         let file_path = dir.path().join("doesnotexist");
         let toml = format!(
             r#"
-            [[rules]]
+            [[perm_rules]]
             path = "{}"
             expected_mode = 600
             importance = "Medium"
@@ -311,7 +319,7 @@ mod tests {
     fn test_empty_path() {
         let dir = tempdir().unwrap();
         let toml = r#"
-            [[rules]]
+            [[perm_rules]]
             path = "   "
             expected_mode = 600
             importance = "Low"

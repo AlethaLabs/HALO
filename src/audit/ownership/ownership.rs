@@ -27,6 +27,8 @@ use std::fs;
 use std::io;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
+use crate::render_output::{Renderable, DataList as RenderDataList, DataMap};
+use indexmap::IndexMap;
 
 /// Result of an ownership audit.
 ///
@@ -42,6 +44,48 @@ pub struct OwnershipResult {
     pub severity: Severity,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+}
+
+impl Renderable for OwnershipResult {
+    fn to_datalist(&self) -> RenderDataList {
+        let mut map = IndexMap::new();
+        map.insert("path".to_string(), self.path.display().to_string());
+        map.insert("expected_uid".to_string(), 
+            self.expected_uid.map_or("N/A".to_string(), |uid| uid.to_string()));
+        map.insert("expected_gid".to_string(), 
+            self.expected_gid.map_or("N/A".to_string(), |gid| gid.to_string()));
+        map.insert("found_uid".to_string(), 
+            self.found_uid.map_or("N/A".to_string(), |uid| uid.to_string()));
+        map.insert("found_gid".to_string(), 
+            self.found_gid.map_or("N/A".to_string(), |gid| gid.to_string()));
+        map.insert("pass".to_string(), self.pass.to_string());
+        map.insert("severity".to_string(), format!("{:?}", self.severity));
+        if let Some(ref err) = self.error {
+            map.insert("error".to_string(), err.clone());
+        }
+        vec![map]
+    }
+    
+    fn pretty_print(&self) -> String {
+        let status_symbol = if self.pass { "✓" } else { "✗" };
+        
+        let mut result = format!(
+            "{} {} (UID: {}/{}, GID: {}/{}) - {:?}",
+            status_symbol,
+            self.path.display(),
+            self.found_uid.map_or("?".to_string(), |uid| uid.to_string()),
+            self.expected_uid.map_or("?".to_string(), |uid| uid.to_string()),
+            self.found_gid.map_or("?".to_string(), |gid| gid.to_string()),
+            self.expected_gid.map_or("?".to_string(), |gid| gid.to_string()),
+            self.severity
+        );
+        
+        if let Some(ref err) = self.error {
+            result.push_str(&format!(" [Error: {}]", err));
+        }
+        
+        result
+    }
 }
 
 /// Represents an ownership audit rule for a file or directory.
@@ -231,9 +275,8 @@ impl OwnershipRule {
     }
 }
 
-use crate::{DataList, DataMap};
 /// Converts a vector of OwnershipResult to DataList for CSV/text rendering
-pub fn ownership_to_datalist(results: &[OwnershipResult]) -> DataList {
+pub fn ownership_to_datalist(results: &[OwnershipResult]) -> RenderDataList {
     results
         .iter()
         .map(|r| {

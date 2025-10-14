@@ -69,6 +69,8 @@ use std::fs;
 use std::io;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
+use crate::render_output::{Renderable, DataList as RenderDataList, DataMap};
+use indexmap::IndexMap;
 
 /// File permission bitmasks for audit severity checks.
 ///
@@ -163,6 +165,45 @@ pub struct PermissionResults {
     /// Optional error if audit failed
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<AuditError>,
+}
+
+impl Renderable for PermissionResults {
+    fn to_datalist(&self) -> RenderDataList {
+        let mut map = IndexMap::new();
+        map.insert("path".to_string(), self.path.display().to_string());
+        map.insert("expected_mode".to_string(), format!("{:o}", self.expected_mode));
+        map.insert("found_mode".to_string(), format!("{:o}", self.found_mode));
+        map.insert("status".to_string(), format!("{:?}", self.status));
+        map.insert("severity".to_string(), format!("{:?}", self.severity));
+        map.insert("importance".to_string(), format!("{:?}", self.importance));
+        if let Some(ref err) = self.error {
+            map.insert("error".to_string(), format!("{:?}", err));
+        }
+        vec![map]
+    }
+    
+    fn pretty_print(&self) -> String {
+        let status_symbol = match self.status {
+            Status::Pass => "✓",
+            Status::Fail => "✗", 
+            Status::Strict => "!",
+        };
+        
+        let mut result = format!(
+            "{} {} (found: {:o}, expected: {:o}) - {:?}",
+            status_symbol,
+            self.path.display(),
+            self.found_mode,
+            self.expected_mode,
+            self.importance
+        );
+        
+        if let Some(ref err) = self.error {
+            result.push_str(&format!(" [Error: {:?}]", err));
+        }
+        
+        result
+    }
 }
 
 /// Helper to serialize file modes as octal strings for JSON output.
@@ -647,8 +688,7 @@ pub fn parse_mode(input: &str) -> Result<u32, AuditError> {
     Err(AuditError::Other("Invalid mode format".to_string()))
 }
 
-use crate::{DataList, DataMap};
-pub fn perm_to_datalist(results: &[PermissionResults]) -> DataList {
+pub fn perm_to_datalist(results: &[PermissionResults]) -> RenderDataList {
     results
         .iter()
         .map(|r| {

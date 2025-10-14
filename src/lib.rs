@@ -23,10 +23,9 @@
 //! ## Library Usage:
 //! This is a new library, there is bound to be some rough edges and breaking changes.
 //! Please open issues or PRs on [GitHub](https://github.com/AlethaLabs/halo) if you have suggestions or find bugs.
-//! Starting Friday - 2025-9-19 - there will be major releases every other Friday.
+//! Starting Friday - 2025-9-19 - there will be minor-major releases once per month.
 //! ```rust
-//! // Note the "render_json" import is necessary for the macro render! to work correctly
-//! use alhalo::{render, PermissionRules, Importance, PermissionResults, render_json, PathStatus, SymRule, check_symlink};
+//! use alhalo::{PermissionRules, Importance, PermissionResults, PathStatus, SymRule, check_symlink, render_output::{Renderable, OutputFormat}};
 //! use std::collections::HashSet;
 //!
 //! fn main() {
@@ -44,11 +43,8 @@
 //!             return;
 //!         }
 //!         _ => {
-//!             // Print the results using alhalo render! macro
-//!             match render!(&results, Some("json")) {
-//!                 Ok(output) => println!("{}", output),
-//!                 Err(e) => eprintln!("Error rendering results: {}", e),
-//!             }
+//!             // Print the results using trait-based rendering
+//!             results.render_and_print(Some("json"));
 //!         }
 //!     }
 //!
@@ -118,14 +114,16 @@ pub mod macros;
 pub mod render_output;
 
 pub use audit::{
-    audit_permissions::{
-        AuditError, AuditPermissions, Importance, PathStatus, PermissionResults, PermissionRules,
-        Severity, Status, parse_mode, perm_to_datalist,
+    permissions::{
+        audit_permissions::{
+            AuditPermissions, PermissionResults, PermissionRules, Severity, PathStatus, Status, Importance, AuditError,
+            parse_mode, perm_to_datalist,
+        },
+        default_permissions::{Log, NetConf, SysConfig, UserConfig},
     },
-    default_permissions::{Log, NetConf, SysConfig, UserConfig},
-    ownership::{OwnershipResult, OwnershipRule, ownership_to_datalist},
+    ownership::ownership::{OwnershipResult, OwnershipRule, ownership_to_datalist},
     symlink::{SymResult, SymRule, check_symlink},
     toml_config::{AuditConfig, OwnerConfig, PermissionConfig, toml_ownership, toml_permissions},
 };
 
-pub use render_output::{DataList, DataMap, filter, render_csv, render_json, render_text};
+pub use render_output::{DataList, DataMap, filter, render_csv, render_json, render_text, Renderable, OutputFormat, ParsedData};

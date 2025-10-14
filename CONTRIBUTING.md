@@ -48,10 +48,38 @@ The CLI binary is responsible for user interaction, argument parsing, and dispat
 
 1. **Add a new command**: Extend the `Commands` enum in `cli.rs` with your new command and its arguments. Use clear, descriptive argument documentation and examples.
 2. **Create a helper function**: At the bottom of `cli.rs`, add a helper function (e.g., `handle_mycommand`) that encapsulates the logic for your command. This function should parse arguments, call the appropriate handler in `handle_args.rs`, and handle output/rendering.
-3. **Implement a handler in handle_args.rs**: Add a function in `handle_args.rs` that performs the actual work (e.g., file parsing, audit logic). Keep this function focused and reusable.
+3. **Implement a handler in handle_args.rs**: Add a function in `handle_args.rs` that performs the actual work (e.g., file parsing, audit logic). Keep this function focused and reusable. Use the trait-based rendering system for consistent output.
 4. **Update run_command**: In `cli.rs`, update the `run_command` dispatcher to call your new helper function for the command.
 5. **Document your changes**: Add doc comments to your new command, helper, and handler functions. Update module-level docs and usage examples as needed.
 6. **Test your command**: Manually test your CLI changes and add integration tests if possible.
+
+#### Trait-Based Rendering
+
+All data structures should implement the `Renderable` trait for consistent output formatting:
+
+```rust
+use crate::render_output::{Renderable, OutputFormat};
+
+impl Renderable for MyDataStruct {
+    fn render_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(self)
+    }
+    
+    fn render_csv(&self) -> Result<String, Box<dyn std::error::Error>> {
+        // CSV implementation
+    }
+    
+    fn render_pretty(&self) -> String {
+        // Pretty format implementation
+    }
+    
+    fn render_text(&self) -> String {
+        // Text format implementation
+    }
+}
+```
+
+Then use `.render_and_print(&output_format)` for consistent output.
 
 #### Example CLI Workflow
 
@@ -60,7 +88,7 @@ The CLI binary is responsible for user interaction, argument parsing, and dispat
 2. Implement `handle_symlink_check` in `cli.rs`:
   - Parse CLI args, call `handle_symlink_audit` in `handle_args.rs`, render output.
 3. Add `handle_symlink_audit` to `handle_args.rs`:
-  - Perform symlink audit logic, return results.
+  - Perform symlink audit logic, return results that implement `Renderable`.
 4. Update `run_command` to dispatch to `handle_symlink_check`.
 5. Document and test your new command.
 
@@ -68,6 +96,7 @@ The CLI binary is responsible for user interaction, argument parsing, and dispat
 
 - Keep CLI logic modular: use helpers for each command.
 - Delegate work to `handle_args.rs` for maintainability.
+- Use trait-based rendering for all output formatting.
 - Document argument usage and expected output.
 - Test edge cases and error handling.
 
@@ -96,7 +125,9 @@ The library provides the core API and logic for HALO. If you want to contribute 
 #### Library Contribution Tips
 
 - Keep modules focused and well-documented.
+- Implement `Renderable` trait for any data structures that need output formatting.
 - Avoid breaking changes unless necessary; document them clearly.
+- Follow the trait-based rendering pattern for consistency.
 - Discuss large changes in an issue before submitting a PR.
 
 ## Commit Messages
