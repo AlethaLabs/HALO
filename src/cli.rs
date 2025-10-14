@@ -1,38 +1,6 @@
-//! HALO CLI module
-//!
-//! This module implements the command-line interface for the HALO tool.
-//!
-//! # Features
-//! - Interactive REPL loop (`halo>` prompt)
-//! - `parse` command: Parse and render system files in various formats
-//! - `check` command: Audit file permissions and ownership
-//!   - Supports permission checks (octal, symbolic)
-//!   - Supports ownership checks via `--expect-uid` and `--expect-gid`
-//!   - Can load custom audit rules from TOML
-//! - Output formats: pretty, json, csv
-//! - `net` command: Network discovery and monitoring tools
-//! - Bash completion script generation
-//!
-//! # Example Usage
-//!
-//! ```bash
-//! halo parse --file /proc/cpuinfo --format json
-//! halo check --path /etc/shadow --expect 640 --expect-uid 0 --expect-gid 42 --format json
-//! halo check --target user
-//! halo check --toml config.toml
-//! ```
-//!
-//! # Design Notes
-//!
-//! The CLI command dispatch is handled by `run_command`, which delegates to specialized handler functions for each command (`handle_parse`, `handle_check`, etc.). This keeps the CLI logic clean and maintainable.
-//!
-//! # Ownership Checks
-//! To audit file ownership, use `--expect-uid` and/or `--expect-gid` with the `check` command.
-//! Ownership results are displayed after permission audit results.
-use crate::handle_args::{
-    AuditTarget, handle_bash, handle_file, handle_ownership, handle_permissions, handle_toml, handle_net,
-};
-use alhalo::{Importance, parse_mode};
+use crate::handlers::{handle_bash, handle_net, handle_parse, handle_check};
+use crate::handlers::check::AuditTarget;
+use alhalo::Importance;
 use clap::{ArgGroup, Parser, Subcommand};
 use std::io::Write;
 use std::path::PathBuf;
@@ -178,18 +146,11 @@ pub enum Commands {
     },
 }
 
-/// Core CLI loop
-/// Interactive CLI loop for HALO
-///
-/// Presents a `halo>` prompt and parses user commands interactively.
-/// Supports `parse`, `check`, `net`, `bash`, `exit`, and `help` commands.
-///
-/// Usage:
-/// ```text
-/// halo> check --path /etc/shadow --expect 640 --expect-uid 0 --expect-gid 42
-/// halo> parse --file /proc/cpuinfo --format json
-/// halo> net --devices --format json
-/// ```
+// Core CLI loop - Interactive CLI loop for HALO
+//
+// Presents a `halo>` prompt and parses user commands interactively.
+// Supports `parse`, `check`, `net`, `bash`, `exit`, and `help` commands.
+//
 pub fn cli() {
     loop {
         print!("halo> ");
@@ -233,15 +194,15 @@ pub fn cli() {
     }
 }
 
-/// Run a CLI command (for direct execution or from the interactive loop)
-///
-/// Delegates each subcommand to a specialized handler function:
-/// - `Parse`: Calls `handle_parse` to parse and render a file
-/// - `Check`: Calls `handle_check` to audit permissions and/or ownership
-/// - `Net`: Calls `handle_net` to perform network discovery
-/// - `Bash`: Calls `handle_bash` to generate bash completion script
-///
-/// This modular approach keeps CLI logic clean and maintainable.
+// Run a CLI command (for direct execution or from the interactive loop)
+//
+// Delegates each subcommand to a specialized handler function:
+// - `Parse`: Calls `handle_parse` to parse and render a file
+// - `Check`: Calls `handle_check` to audit permissions and/or ownership
+// - `Net`: Calls `handle_net` to perform network discovery
+// - `Bash`: Calls `handle_bash` to generate bash completion script
+//
+// This modular approach keeps CLI logic clean and maintainable.
 pub fn run_command(command: &Commands) {
     match command {
         Commands::Parse {
@@ -273,108 +234,5 @@ pub fn run_command(command: &Commands) {
         Commands::Bash { out } => {
             handle_bash(out);
         }
-    }
-}
-
-/// Handler for the `parse` command
-///
-/// Parses the specified file and renders output in the selected format
-/// Optionally stores output to a file
-fn handle_parse(
-    file: &Option<PathBuf>,
-    format: &Option<String>,
-    line: &Option<Vec<String>>,
-    store: &Option<PathBuf>,
-) {
-    use alhalo::{ParsedData, Renderable, OutputFormat};
-    
-    let data = handle_file(file.as_ref().map(|p| p.to_owned()));
-    let filter_keys = line.as_ref().cloned().unwrap_or_default();
-    let parsed_data = ParsedData::with_filter(data, filter_keys);
-    
-    let output_format = OutputFormat::from_str(format.as_deref());
-    match parsed_data.render(output_format) {
-        Ok(output) => {
-            print!("{}", output);
-            if let Some(path) = store {
-                if let Err(e) = std::fs::write(path, &output) {
-                    eprintln!("Failed to store output: {}", e);
-                } else {
-                    println!("Output stored to {}", path.display());
-                }
-            }
-        }
-        Err(e) => eprintln!("Error rendering output: {}", e),
-    }
-}
-
-/// Handler for the `check` command.
-///
-/// Audits file permissions and/or ownership based on CLI arguments.
-/// Supports permission checks, ownership checks, and TOML config loading.
-/// Results are rendered and printed in the selected format.
-fn handle_check(
-    target: &Option<AuditTarget>,
-    path: &Option<PathBuf>,
-    format: &Option<String>,
-    expect: &Option<String>,
-    importance: &Option<Importance>,
-    expect_uid: &Option<u32>,
-    expect_gid: &Option<u32>,
-    store: &Option<PathBuf>,
-    toml: &Option<PathBuf>,
-) {
-    if toml.is_some() {
-        handle_toml();
-        return;
-    }
-    let permission_args = target.is_some() || (expect.is_some() && importance.is_some());
-    let ownership_args = expect_uid.is_some() || expect_gid.is_some();
-
-    if permission_args && ownership_args {
-        let parsed_mode = expect.as_ref().map(|s| parse_mode(s)).transpose();
-        match parsed_mode {
-            Ok(mode_opt) => {
-                handle_permissions(
-                    target.as_ref().map(|t| t.to_owned()),
-                    path.as_ref().map(|p| p.to_owned()),
-                    mode_opt,
-                    importance.as_ref().map(|i| i.to_owned()),
-                    store.as_ref().map(|s| s.to_owned()),
-                    format,
-                );
-            }
-            Err(e) => eprintln!("Error parsing expected mode: {}", e),
-        }
-        handle_ownership(
-            path.as_ref().map(|p| p.to_owned()),
-            *expect_uid,
-            *expect_gid,
-            format,
-        );
-    } else if permission_args {
-        let parsed_mode = expect.as_ref().map(|s| parse_mode(s)).transpose();
-        match parsed_mode {
-            Ok(mode_opt) => {
-                handle_permissions(
-                    target.as_ref().map(|t| t.to_owned()),
-                    path.as_ref().map(|p| p.to_owned()),
-                    mode_opt,
-                    importance.as_ref().map(|i| i.to_owned()),
-                    store.as_ref().map(|s| s.to_owned()),
-                    format,
-                );
-            }
-            Err(e) => eprintln!("Error parsing expected mode: {}", e),
-        }
-    } else if ownership_args {
-        handle_ownership(
-            path.as_ref().map(|p| p.to_owned()),
-            *expect_uid,
-            *expect_gid,
-            format,
-        );
-    } else {
-        println!("No valid permission or ownership audit arguments provided.\n");
     }
 }

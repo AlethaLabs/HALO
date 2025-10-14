@@ -1,32 +1,15 @@
-//! CLI argument handlers and audit dispatch for HALO.
+//! Check command handler
 //!
-//! This module provides:
-//! - File parsing utilities for structured data
-//! - Audit target selection and permission checks
-//! - Ownership and summary handlers for CLI output
-//!
-//! Used by the main CLI loop to process commands and render results for users and sysadmins.
-use crate::cli::Cli;
+//! Handles file permission and ownership auditing functionality.
+
 use crate::fix_script::generate_fix_script;
-use alhalo::audit::networking::discovery::{get_arp_devices};
 use alhalo::{
     AuditPermissions, Importance, Log, NetConf, PermissionRules, SysConfig, UserConfig,
-    toml_ownership, toml_permissions, Renderable,
+    toml_ownership, toml_permissions, Renderable, parse_mode,
 };
-use clap::CommandFactory;
-use indexmap::IndexMap;
 use std::env;
-use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
-
-/// A deterministic map of key-value pairs parsed from a file.
-///
-/// Using `IndexMap` instead of `HashMap` avoids randomizing file contents, ensuring stable output order.
-type DataMap = IndexMap<String, String>;
-
-/// A list of parsed data maps, representing structured file contents.
-type DataList = Vec<DataMap>;
 
 /// Audit targets for permissions check.
 ///
@@ -40,54 +23,80 @@ pub enum AuditTarget {
     All,
 }
 
-/// Parses a file into a list of key-value maps.
-///
-/// Each non-empty line containing a colon is split into key and value, trimmed, and added to the current map.
-/// Blank lines separate records. Returns a list of maps for each record.
-///
-/// # Arguments
-/// * `file` - Optional path to the file to parse. If `None`, returns an empty list.
-pub fn handle_file(file: Option<PathBuf>) -> DataList {
-    // println!("DEBUG: trying to read {:?}", paths);
-    let content = if let Some(path) = file {
-        fs::read_to_string(path)
-    } else {
-        Ok(String::new())
-    };
+// Handler for the `check` command.
+//
+// Audits file permissions and/or ownership based on CLI arguments.
+// Supports permission checks, ownership checks, and TOML config loading.
+// Results are rendered and printed in the selected format.
+pub fn handle_check(
+    target: &Option<AuditTarget>,
+    path: &Option<PathBuf>,
+    format: &Option<String>,
+    expect: &Option<String>,
+    importance: &Option<Importance>,
+    expect_uid: &Option<u32>,
+    expect_gid: &Option<u32>,
+    store: &Option<PathBuf>,
+    toml: &Option<PathBuf>,
+) {
+    if toml.is_some() {
+        handle_toml();
+        return;
+    }
+    let permission_args = target.is_some() || (expect.is_some() && importance.is_some());
+    let ownership_args = expect_uid.is_some() || expect_gid.is_some();
 
-    let mut data: DataList = Vec::new();
-    let mut current_map: DataMap = IndexMap::new();
-
-    for line in content.unwrap_or_default().lines() {
-        if line.trim().is_empty() {
-            if !current_map.is_empty() {
-                data.push(current_map.clone());
-                current_map.clear();
+    if permission_args && ownership_args {
+        let parsed_mode = expect.as_ref().map(|s| parse_mode(s)).transpose();
+        match parsed_mode {
+            Ok(mode_opt) => {
+                handle_permissions(
+                    target.as_ref().map(|t| t.to_owned()),
+                    path.as_ref().map(|p| p.to_owned()),
+                    mode_opt,
+                    importance.as_ref().map(|i| i.to_owned()),
+                    store.as_ref().map(|s| s.to_owned()),
+                    format,
+                );
             }
-            continue;
+            Err(e) => eprintln!("Error parsing expected mode: {}", e),
         }
-        if let Some((key, value)) = line.split_once(':') {
-            current_map.insert(key.trim().to_string(), value.trim().to_string());
+        handle_ownership(
+            path.as_ref().map(|p| p.to_owned()),
+            *expect_uid,
+            *expect_gid,
+            format,
+        );
+    } else if permission_args {
+        let parsed_mode = expect.as_ref().map(|s| parse_mode(s)).transpose();
+        match parsed_mode {
+            Ok(mode_opt) => {
+                handle_permissions(
+                    target.as_ref().map(|t| t.to_owned()),
+                    path.as_ref().map(|p| p.to_owned()),
+                    mode_opt,
+                    importance.as_ref().map(|i| i.to_owned()),
+                    store.as_ref().map(|s| s.to_owned()),
+                    format,
+                );
+            }
+            Err(e) => eprintln!("Error parsing expected mode: {}", e),
         }
+    } else if ownership_args {
+        handle_ownership(
+            path.as_ref().map(|p| p.to_owned()),
+            *expect_uid,
+            *expect_gid,
+            format,
+        );
+    } else {
+        println!("No valid permission or ownership audit arguments provided.\n");
     }
-    if !current_map.is_empty() {
-        data.push(current_map);
-    }
-
-    data
 }
 
-/// Handles permission audit requests from the CLI.
-///
-/// Dispatches to built-in audit targets or custom file audits based on arguments.
-///
-/// # Arguments
-/// * `target` - Optional predefined audit target (User, Sys, Net, Log, All).
-/// * `path` - Optional custom file or directory path to audit.
-/// * `expected_mode` - Expected file mode (octal).
-/// * `importance` - Importance level for the audit.
-///
-/// Returns a vector of `PermissionResults` for all audited files.
+// Handler for permission auditing
+//
+// Audits file permissions based on target type or custom path/mode
 pub fn handle_permissions(
     target: Option<AuditTarget>,
     path: Option<PathBuf>,
@@ -225,17 +234,9 @@ pub fn handle_permissions(
     }
 }
 
-/// Handles ownership audit requests from the CLI.
-///
-/// Checks the ownership of a given path against expected UID and GID.
-/// Returns the audit result struct.
-///
-/// # Arguments
-/// * `path` - Path to the file or directory to check
-/// * `expect_uid` - Expected UID (user ID)
-/// * `expect_gid` - Expected GID (group ID)
-///
-/// Returns an OwnershipResult (see audit/ownership.rs)
+// Handler for ownership auditing
+//
+// Checks the ownership of a given path against expected UID and GID.
 pub fn handle_ownership(
     path: Option<PathBuf>,
     expect_uid: Option<u32>,
@@ -259,24 +260,9 @@ pub fn handle_ownership(
     println!("Ownership check could not be performed.");
 }
 
-/// Handler for Bash completion script generation
-pub fn handle_bash(out: &str) {
-    use clap_complete::{generate_to, shells::Bash};
-    use std::path::Path;
-    let mut cmd = Cli::command();
-    match generate_to(
-        Bash,
-        &mut cmd,
-        "halo",
-        Path::new(out).parent().unwrap_or_else(|| Path::new(".")),
-    ) {
-        Ok(path) => {
-            println!("Bash completion script generated at: {}", path.display())
-        }
-        Err(e) => eprintln!("Failed to generate completion script: {}", e),
-    }
-}
-
+// Handler for TOML configuration loading
+//
+// Loads and processes TOML configuration files for permissions and ownership audits
 pub fn handle_toml() {
     // Get TOML file path and format from CLI args (simple version: env vars or prompt)
     let args: Vec<String> = env::args().collect();
@@ -309,19 +295,5 @@ pub fn handle_toml() {
         eprintln!(
             "No TOML file path provided. Usage: halo check --toml config.toml [--format json|csv|text]"
         );
-    }
-}
-
-/// Handle Networking
-pub fn handle_net(format: &Option<String>, devices: bool) {
-    if devices {
-        match get_arp_devices() {
-            Ok(results) => {
-                results.render_and_print(format.as_deref());
-            },
-            Err(e) => eprintln!("Error discovering network devices: {}", e),
-        }
-    } else {
-        eprintln!("Network discovery requires the --devices flag");
     }
 }

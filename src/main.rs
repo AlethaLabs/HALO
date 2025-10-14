@@ -1,6 +1,7 @@
 mod cli;
 mod fix_script;
-mod handle_args;
+mod types;
+mod handlers;
 use crate::cli::{Cli, cli, run_command};
 use clap::Parser;
 
