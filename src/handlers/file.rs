@@ -1,17 +1,11 @@
-//! File handling utilities
-//!
-//! Contains functions for reading and parsing file contents.
-
 use std::fs;
 use std::path::PathBuf;
 use indexmap::IndexMap;
 
 use crate::types::{DataList, DataMap};
 
-/// Handler for file operations
-///
-/// Reads and parses file contents into structured data format.
-/// Expects colon-separated key-value pairs with blank lines as record separators.
+/// Reads and parses file contents into structured data format
+/// Expects colon-separated key-value pairs with blank lines as record separators
 pub fn handle_file(file: Option<PathBuf>) -> DataList {
     // println!("DEBUG: trying to read {:?}", paths);
     let content = if let Some(path) = file {

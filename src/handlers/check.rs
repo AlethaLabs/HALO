@@ -1,7 +1,3 @@
-//! Check command handler
-//!
-//! Handles file permission and ownership auditing functionality.
-
 use crate::fix_script::generate_fix_script;
 use alhalo::{
     AuditPermissions, Importance, Log, NetConf, PermissionRules, SysConfig, UserConfig,
@@ -23,8 +19,6 @@ pub enum AuditTarget {
     All,
 }
 
-// Handler for the `check` command.
-//
 // Audits file permissions and/or ownership based on CLI arguments.
 // Supports permission checks, ownership checks, and TOML config loading.
 // Results are rendered and printed in the selected format.
@@ -94,8 +88,6 @@ pub fn handle_check(
     }
 }
 
-// Handler for permission auditing
-//
 // Audits file permissions based on target type or custom path/mode
 pub fn handle_permissions(
     target: Option<AuditTarget>,

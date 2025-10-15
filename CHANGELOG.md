@@ -51,3 +51,7 @@ All notable changes to this project will be documented in this file.
     - Discover devices on local network
 - Updated examples/tests
 - Updated documentation
+
+## [0.3.1] - 2025-10-14
+- Added prelude for ease of API use
+- Fixed docs

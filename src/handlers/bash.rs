@@ -1,7 +1,3 @@
-//! Bash completion generation handler
-//!
-//! Handles generation of bash completion scripts for the CLI.
-
 use crate::cli::Cli;
 use clap::CommandFactory;
 use clap_complete::{generate_to, shells::Bash};

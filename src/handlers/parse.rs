@@ -1,16 +1,10 @@
-//! Parse command handler
-//!
-//! Handles file parsing and rendering functionality.
-
 use crate::handlers::file::handle_file;
 use alhalo::{ParsedData, Renderable};
 use alhalo::render_output::OutputFormat;
 use std::path::PathBuf;
 
 // Handler for the `parse` command
-//
 // Parses the specified file and renders output in the selected format
-// Optionally stores output to a file
 pub fn handle_parse(
     file: &Option<PathBuf>,
     format: &Option<String>,

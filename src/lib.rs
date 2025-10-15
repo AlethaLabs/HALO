@@ -24,8 +24,10 @@
 //! This is a new library, there is bound to be some rough edges and breaking changes.
 //! Please open issues or PRs on [GitHub](https://github.com/AlethaLabs/halo) if you have suggestions or find bugs.
 //! Starting Friday - 2025-9-19 - there will be minor-major releases once per month.
+//! 
+//! ### Simple Usage (Recommended)
 //! ```rust
-//! use alhalo::{PermissionRules, Importance, PermissionResults, PathStatus, SymRule, check_symlink, render_output::{Renderable, OutputFormat}};
+//! use alhalo::prelude::*;
 //! use std::collections::HashSet;
 //!
 //! fn main() {
@@ -47,6 +49,17 @@
 //!             results.render_and_print(Some("json"));
 //!         }
 //!     }
+//! }
+//! ```
+//! 
+//! ### Alternative Usage (Explicit Imports)
+//! ```rust
+//! use alhalo::{PermissionRules, Importance, PermissionResults, check_symlink, SymRule};
+//! use alhalo::render_output::{Renderable, OutputFormat};
+//! use std::collections::HashSet;
+//!
+//! fn main() {
+//!     // Same code as above...
 //!
 //!     // Symlink audit example
 //!     let sym_rule = SymRule {
@@ -109,21 +122,32 @@
 //!
 //! _MIT License_
 
+//! ## API Organization
+//! 
+//! - **Quick Start**: Use [`prelude`] for easy imports
+//! - **Core Types**: [`PermissionRules`], [`PermissionResults`], [`Importance`] 
+//! - **Rendering**: [`Renderable`] trait for output formatting
+//! - **Advanced**: Full API available through submodules ([`audit`], [`render_output`])
+
 pub mod audit;
 pub mod macros;
 pub mod render_output;
+pub mod prelude;
 
+#[doc(hidden)]
 pub use audit::{
     permissions::{
         audit_permissions::{
-            AuditPermissions, PermissionResults, PermissionRules, Severity, PathStatus, Status, Importance, AuditError,
-            parse_mode, perm_to_datalist,
+            AuditPermissions, Severity, PathStatus, Status, AuditError,
+            parse_mode, perm_to_datalist, PermissionResults, PermissionRules, Importance,
         },
         default_permissions::{Log, NetConf, SysConfig, UserConfig},
     },
     ownership::ownership::{OwnershipResult, OwnershipRule, ownership_to_datalist},
     symlink::{SymResult, SymRule, check_symlink},
     toml_config::{AuditConfig, OwnerConfig, PermissionConfig, toml_ownership, toml_permissions},
+    networking::discovery,
 };
 
-pub use render_output::{DataList, DataMap, filter, render_csv, render_json, render_text, Renderable, OutputFormat, ParsedData};
+#[doc(hidden)]
+pub use render_output::{Renderable, OutputFormat, DataList, DataMap, filter, render_csv, render_json, render_text, ParsedData};
